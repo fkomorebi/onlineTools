@@ -99,7 +99,12 @@ npm test           # 全部测试
 | `npm run test:dom` | 77 项 DOM 集成测试 —— 在 jsdom 中加载真实页面并驱动真实代码 |
 | `npm run test:encode` | 18 项真实编解码测试 —— 用 sharp 生成/校验真实 PNG/WebP/JPEG 字节 |
 | `npm run test:browser` | 28 项真实浏览器测试 —— 需要先启动无头 Edge（见下） |
+| `npm run test:actions` | 校验 workflow 用到的 GitHub Action 均不依赖 Node.js 20 |
 | `npm run shots` | 截图各页面到 `test/shots/` |
+
+> `test:actions` 会拉取每个 action 的 `action.yml` 读取 `runs.using` 字段，
+> 对 composite 动作还会递归检查其内部依赖。GitHub 已于 2025-09-19 弃用
+> Actions runner 上的 Node.js 20，用它可以在升级 action 版本时避免遗漏。
 
 浏览器测试需要一个开启调试端口的 Edge：
 
@@ -135,6 +140,7 @@ npm run test:browser
     ├── encode.test.js            真实编解码测试（sharp）
     ├── browser-image.js          浏览器图片压缩验证
     ├── browser-convert.js        浏览器格式转换验证
+    ├── check-workflow.ps1        校验 Actions 版本（Node 24）
     └── shot2.js                  截图脚本
 ```
 

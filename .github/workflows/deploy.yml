@@ -23,10 +23,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Pages
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@v6
 
       # 本项目是纯静态站点，没有构建步骤 —— 仓库根目录就是最终产物。
       # 这里先把要发布的文件收集到 ./_site，只带上站点真正需要的文件，
@@ -36,7 +36,7 @@ jobs:
       #   - name: Build
       #     run: npm ci && npm run build
       #   - name: Upload artifact
-      #     uses: actions/upload-pages-artifact@v3
+      #     uses: actions/upload-pages-artifact@v5
       #     with:
       #       path: ./dist
       - name: Collect static site
@@ -50,11 +50,11 @@ jobs:
           ls -la _site
 
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: ./_site
           retention-days: 1
 
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

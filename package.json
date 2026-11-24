@@ -10,6 +10,7 @@
     "test:dom": "node test/dom.test.js",
     "test:encode": "node test/encode.test.js",
     "test:browser": "node test/browser-image.js && node test/browser-convert.js",
+    "test:actions": "powershell -NoProfile -ExecutionPolicy Bypass -File test/check-workflow.ps1",
     "shots": "node test/shot2.js"
   },
   "repository": {
