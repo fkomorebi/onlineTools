@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>在线工具箱 · 无广告 · 开源</title>
+<meta name="description" content="纯前端在线工具箱：JSON 格式化、图片压缩、图片格式转换。全部在浏览器本地运行，数据不上传，无广告无追踪。">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧰</text></svg>">
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap header-inner">
+    <a href="./" class="brand">
+      <span class="brand-mark">🧰</span>
+      <span class="brand-text">在线工具箱</span>
+    </a>
+    <nav class="nav" id="nav">
+      <a href="#/json" data-route="#/json">JSON 格式化</a>
+      <a href="#/image" data-route="#/image">图片压缩</a>
+      <a href="#/convert" data-route="#/convert">格式转换</a>
+      <a href="#/about" data-route="#/about">关于</a>
+    </nav>
+    <button class="nav-toggle" id="navToggle" aria-label="菜单" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main id="app" class="wrap"></main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <p>所有计算均在本机浏览器内完成 —— 文件不会上传到任何服务器。</p>
+    <p class="footer-links">
+      <a href="#/about">关于</a>
+      <a href="https://github.com" target="_blank" rel="noopener">GitHub</a>
+    </p>
+  </div>
+</footer>
+
+<script src="assets/js/util.js"></script>
+<script src="assets/js/home.js"></script>
+<script src="assets/js/about.js"></script>
+<script src="assets/js/json.js"></script>
+<script src="assets/js/image-core.js"></script>
+<script src="assets/js/image.js"></script>
+<script src="assets/js/convert.js"></script>
+<script src="assets/js/app.js"></script>
+</body>
+</html>

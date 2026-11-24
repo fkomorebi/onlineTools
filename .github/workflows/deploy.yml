@@ -1,0 +1,60 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: ["main", "master"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      # 本项目是纯静态站点，没有构建步骤 —— 仓库根目录就是最终产物。
+      # 这里先把要发布的文件收集到 ./_site，只带上站点真正需要的文件，
+      # 避免把 node_modules、测试代码等一并发布出去。
+      #
+      # 若以后引入构建步骤，把构建输出到 ./dist，然后改成：
+      #   - name: Build
+      #     run: npm ci && npm run build
+      #   - name: Upload artifact
+      #     uses: actions/upload-pages-artifact@v3
+      #     with:
+      #       path: ./dist
+      - name: Collect static site
+        run: |
+          mkdir -p _site
+          cp -r index.html _site/
+          cp -r assets _site/
+          [ -f CNAME ] && cp CNAME _site/ || true
+          [ -f .nojekyll ] && cp .nojekyll _site/ || true
+          [ -f favicon.ico ] && cp favicon.ico _site/ || true
+          ls -la _site
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./_site
+          retention-days: 1
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

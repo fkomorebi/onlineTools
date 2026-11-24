@@ -1,0 +1,62 @@
+/* ============================================
+   应用入口 —— 哈希路由
+   ============================================ */
+(function (global) {
+  'use strict';
+
+  const app = document.getElementById('app');
+  const nav = document.getElementById('nav');
+  const navToggle = document.getElementById('navToggle');
+
+  const ROUTES = {
+    '':        { page: () => global.HomePage,    nav: null },
+    '#/':      { page: () => global.HomePage,    nav: null },
+    '#/json':  { page: () => global.JSONTool,    nav: '#/json' },
+    '#/image': { page: () => global.ImageTool,   nav: '#/image' },
+    '#/convert': { page: () => global.ConvertTool, nav: '#/convert' },
+    '#/about': { page: () => global.AboutPage,   nav: '#/about' }
+  };
+
+  function resolve(hash) {
+    const h = (hash || '').replace(/^#/, '');
+    return ROUTES[hash] || ROUTES['#' + h] || ROUTES[''];
+  }
+
+  function route() {
+    const hash = location.hash;
+    const entry = resolve(hash);
+    const mod = entry.page();
+
+    // 切页前清理上一页的全局状态
+    if (mod && typeof mod.destroy === 'function') {
+      try { mod.destroy(); } catch (e) { /* ignore */ }
+    }
+
+    if (!mod) {
+      app.innerHTML = '<div class="card">页面不存在。<a href="#/">返回首页</a></div>';
+      return;
+    }
+    mod.render(app);
+
+    // 导航高亮
+    nav.querySelectorAll('a').forEach(function (a) {
+      a.classList.toggle('active', a.getAttribute('href') === entry.nav);
+    });
+
+    nav.classList.remove('open');
+    navToggle.setAttribute('aria-expanded', 'false');
+
+    // 回到顶部
+    window.scrollTo(0, 0);
+  }
+
+  navToggle.addEventListener('click', function () {
+    const open = nav.classList.toggle('open');
+    navToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+
+  global.addEventListener('hashchange', route);
+  global.addEventListener('DOMContentLoaded', route);
+
+  if (document.readyState !== 'loading') route();
+})(window);

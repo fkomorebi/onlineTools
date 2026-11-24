@@ -1,0 +1,38 @@
+{
+  "name": "online-tools",
+  "version": "1.0.0",
+  "description": "纯前端、零广告、无追踪的在线工具箱：JSON 格式化、图片压缩、图片格式转换",
+  "private": true,
+  "scripts": {
+    "start": "npx --yes serve . -l 8080",
+    "serve": "python -m http.server 8080",
+    "test": "node test/dom.test.js && node test/encode.test.js",
+    "test:dom": "node test/dom.test.js",
+    "test:encode": "node test/encode.test.js",
+    "test:browser": "node test/browser-image.js && node test/browser-convert.js",
+    "shots": "node test/shot2.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fkomorebi/onlineTools.git"
+  },
+  "keywords": [
+    "json-formatter",
+    "image-compressor",
+    "webp",
+    "png",
+    "static-site",
+    "github-pages"
+  ],
+  "author": "",
+  "license": "MIT",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/fkomorebi/onlineTools/issues"
+  },
+  "homepage": "https://github.com/fkomorebi/onlineTools#readme",
+  "devDependencies": {
+    "jsdom": "^31.0.1",
+    "sharp": "^0.35.5"
+  }
+}
