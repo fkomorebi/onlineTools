@@ -15,12 +15,15 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  # 构建并上传产物。
+  #
+  # 必须与 deploy 拆成两个 job：actions/deploy-pages 通过 artifact 元数据
+  # 接口按“当前 workflow run”查找名为 github-pages 的产物。上传与部署放在
+  # 同一个 job 时，刚上传的产物可能还没对元数据接口可见，deploy 会报
+  #   No artifacts named "github-pages" were found for this workflow run.
+  # 拆开并用 needs: 建立依赖后，deploy 开始时产物已经可见。
+  build:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -55,6 +58,15 @@ jobs:
           path: ./_site
           retention-days: 1
 
+  # 部署到 GitHub Pages —— 只依赖 build job 产出的 github-pages 产物。
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v5

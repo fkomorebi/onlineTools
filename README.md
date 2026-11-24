@@ -67,6 +67,18 @@
 工作流会把 `index.html`、`assets/`、`.nojekyll`（以及 `CNAME`，若存在）收集到
 `_site/` 再发布 —— 不会把 `node_modules/` 和测试代码带上去。
 
+工作流分为两个 job：`build` 负责收集文件并上传 `github-pages` 产物，
+`deploy` 通过 `needs: build` 依赖它并执行发布。
+
+> **为什么必须拆成两个 job**：`actions/deploy-pages` 是通过 artifact 元数据接口
+> 按「当前 workflow run」查找名为 `github-pages` 的产物的。上传与部署写在同一个
+> job 时，刚上传的产物可能还没对该接口可见，部署就会失败并报
+> `No artifacts named "github-pages" were found for this workflow run`。
+> 拆开并用 `needs:` 建立依赖后，部署开始时产物已经可见 ——
+> 这也是 GitHub 官方 Pages 模板的做法。
+>
+> `npm run test:actions` 会校验这个结构，避免以后改动时不小心改回单 job。
+
 站点地址为 `https://<你的用户名>.github.io/<仓库名>/`。
 
 ### 方式二：直接从分支部署
@@ -110,7 +122,7 @@ npm test           # 全部测试
 | `npm run test:dom` | 130 项 DOM 集成测试 —— 在 jsdom 中加载真实页面并驱动真实代码 |
 | `npm run test:encode` | 18 项真实编解码测试 —— 用 sharp 生成/校验真实 PNG/WebP/JPEG 字节 |
 | `npm run test:browser` | 28 项真实浏览器测试 —— 需要先启动无头 Edge（见下） |
-| `npm run test:actions` | 校验 workflow 用到的 GitHub Action 均不依赖 Node.js 20 |
+| `npm run test:actions` | 校验 workflow 用到的 GitHub Action 均不依赖 Node.js 20，并检查 build/deploy 是否拆成了两个 job |
 | `npm run shots` | 截图各页面到 `test/shots/` |
 
 > `test:actions` 会拉取每个 action 的 `action.yml` 读取 `runs.using` 字段，
