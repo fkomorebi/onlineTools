@@ -27,6 +27,8 @@
       <ul>
         <li>图片用 <code>FileReader</code> 读取，用 <code>Canvas</code> 缩放与编码，全程在浏览器内存中完成。</li>
         <li>JSON 用浏览器内置的 <code>JSON.parse</code> / <code>JSON.stringify</code> 处理。</li>
+        <li>时间换算用浏览器内置的 <code>Date</code> 与 <code>Intl.DateTimeFormat</code>，
+        时间戳直接来自 <code>Date.now()</code>，不经过任何服务器。</li>
         <li>本站没有后端、没有数据库、不发送任何分析事件。</li>
         <li>页面里不写 <code>localStorage</code> 或 <code>cookie</code>，刷新后一切归零。</li>
       </ul>
@@ -59,6 +61,8 @@ python -m http.server 8080</code></pre>
         <li><code>assets/js/image-core.js</code> —— 图片处理核心</li>
         <li><code>assets/js/image.js</code> —— 图片压缩</li>
         <li><code>assets/js/convert.js</code> —— 格式转换</li>
+        <li><code>assets/js/datetime-core.js</code> —— 时间格式化核心</li>
+        <li><code>assets/js/datetime.js</code> —— 时间格式化</li>
       </ul>
     `;
     card.appendChild(box);

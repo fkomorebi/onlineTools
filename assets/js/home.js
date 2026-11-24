@@ -12,7 +12,7 @@
     const hero = el('div', { class: 'hero' });
     hero.appendChild(el('h1', { text: '🧰 干净的在线工具箱' }));
     hero.appendChild(el('p', {
-      text: 'JSON 格式化、图片压缩、格式转换 —— 没有广告、没有弹窗、没有追踪。所有计算都在你的浏览器里完成。'
+      text: 'JSON 格式化、图片压缩、格式转换、时间格式化 —— 没有广告、没有弹窗、没有追踪。所有计算都在你的浏览器里完成。'
     }));
     root.appendChild(hero);
 
@@ -29,6 +29,10 @@
       {
         icon: '🔄', route: '#/convert', title: '格式转换',
         desc: 'PNG 转 WebP、WebP 转 PNG、JPEG 互转，保留透明通道，转换前后对比。'
+      },
+      {
+        icon: '🕒', route: '#/datetime', title: '时间格式化',
+        desc: '时间转 UTC、ISO 8601、RFC、Unix 时间戳，多时区对照与自定义格式串。'
       }
     ];
     tools.forEach(function (t) {

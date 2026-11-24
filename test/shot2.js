@@ -145,8 +145,16 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     wait: 4000
   });
   await shot('07-about', '#/about');
-  await shot('08-mobile-home', '', { w: 390, h: 844, mobile: true });
-  await shot('09-mobile-image', '#/image', { w: 390, h: 844, mobile: true });
+  await shot('08-datetime', '#/datetime', {
+    script: `(() => {
+      const i = document.getElementById('dt-input');
+      i.value = '2026-11-24 15:45:04';
+      i.dispatchEvent(new Event('input',{bubbles:true}));
+      return true;
+    })()`
+  });
+  await shot('09-mobile-home', '', { w: 390, h: 844, mobile: true });
+  await shot('10-mobile-image', '#/image', { w: 390, h: 844, mobile: true });
 
   console.log('\nJS 异常:', errors.length ? errors.join(' | ') : '无');
   ws.close();

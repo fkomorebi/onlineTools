@@ -13,6 +13,7 @@
 | 📋 [JSON 格式化](index.html#/json) | 格式化 / 压缩 / 校验，错误定位到行列，树形视图，路径查询（如 `$.a.b[0].c`），统计与类型分布 |
 | 🗜️ [图片压缩](index.html#/image) | 批量压缩，输出 WebP / JPEG / PNG，可指定目标体积（自动二分调质）与最大尺寸 |
 | 🔄 [格式转换](index.html#/convert) | PNG ⇄ WebP ⇄ JPEG 互转，保留透明通道，转换前后体积对比 |
+| 🕒 [时间格式化](index.html#/datetime) | 时间转 UTC / ISO 8601 / RFC / Unix 时间戳，多时区对照，自定义格式串，时间差计算 |
 
 ### JSON 格式化
 
@@ -39,6 +40,16 @@
 - PNG → WebP、WebP → PNG、JPEG → WebP 等互转
 - 批量处理，转换前后并排预览 + 体积对比
 - PNG 保留透明通道（alpha 精确保留）
+
+### 时间格式化
+
+- **输入任意时间**：ISO 字符串、`2026-11-24 15:45:04`、`2026/11/24`、Unix 秒 / 毫秒时间戳
+- **常用格式一键复制**：ISO 8601（本地 & UTC）、RFC 7231 / HTTP、RFC 2822、中文可读日期、紧凑格式、Unix 时间戳（秒 / 毫秒）
+- **多时区对照**：内置 14 个常用时区（UTC、上海、东京、伦敦、纽约……），显示各自 UTC 偏移与当地时间，夏令时标记 `DST`
+- **自定义格式串**：`yyyy-MM-dd HH:mm:ss`、`yyyyMMddHHmmss`、`EEE, dd MMM yyyy HH:mm:ss` 等，支持 `Z` / `ZZ` 时区偏移、`X` / `x` 时间戳
+- **时区自由切换**：时区下拉框可选任意 IANA 时区（`Intl.supportedValuesOf`），可搜索添加
+- **时间差计算**：两个时间相差多少天 / 小时 / 分钟 / 秒
+- **实时更新**：打开即显示当前时间，每秒刷新
 
 ## 🚀 部署到 GitHub Pages
 
@@ -96,7 +107,7 @@ npm test           # 全部测试
 
 | 命令 | 说明 |
 |------|------|
-| `npm run test:dom` | 77 项 DOM 集成测试 —— 在 jsdom 中加载真实页面并驱动真实代码 |
+| `npm run test:dom` | 130 项 DOM 集成测试 —— 在 jsdom 中加载真实页面并驱动真实代码 |
 | `npm run test:encode` | 18 项真实编解码测试 —— 用 sharp 生成/校验真实 PNG/WebP/JPEG 字节 |
 | `npm run test:browser` | 28 项真实浏览器测试 —— 需要先启动无头 Edge（见下） |
 | `npm run test:actions` | 校验 workflow 用到的 GitHub Action 均不依赖 Node.js 20 |
@@ -134,6 +145,8 @@ npm run test:browser
 │       ├── image-core.js         图片处理核心（Canvas 编码 / 目标体积二分）
 │       ├── image.js              图片压缩工具
 │       ├── convert.js            格式转换工具
+│       ├── datetime-core.js      时间格式化核心（解析 / 时区换算 / 格式串）
+│       ├── datetime.js           时间格式化工具
 │       └── app.js                哈希路由与启动
 └── test/
     ├── dom.test.js               DOM 集成测试（jsdom）
