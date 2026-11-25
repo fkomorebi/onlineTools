@@ -1068,7 +1068,17 @@ td.num.grow { color: var(--red); }
   overflow: hidden;
   background: var(--bg-code);
 }
-.wm-stage canvas { display: block; max-width: 100%; height: auto; cursor: crosshair; }
+.wm-stage canvas {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  cursor: crosshair;
+  /* 移动端拖动框选时不要被页面滚动 / 缩放手势吃掉 */
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
 
 .wm-sel {
   position: absolute;

@@ -1570,14 +1570,44 @@ const statusText = (sel) => {
   await sleep(30);
   check('自动检测有响应', statusText().length > 0, statusText());
 
-  // 手动框选：模拟 mousedown / mousemove / mouseup
+  // 手动框选：模拟 pointerdown / pointermove / pointerup（Pointer Events 路径）
   const canvas = $('#wm-canvas');
   canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 400, height: 300, right: 400, bottom: 300 });
-  canvas.dispatchEvent(new window.MouseEvent('mousedown', { bubbles: true, clientX: 10, clientY: 20 }));
-  window.dispatchEvent(new window.MouseEvent('mousemove', { bubbles: true, clientX: 60, clientY: 70 }));
-  window.dispatchEvent(new window.MouseEvent('mouseup', { bubbles: true, clientX: 60, clientY: 70 }));
+  $('#wm-stage').getBoundingClientRect = () => ({ left: 0, top: 0, width: 400, height: 300, right: 400, bottom: 300 });
+  if (!window.PointerEvent) {
+    window.PointerEvent = class extends window.MouseEvent {
+      constructor(type, init) { super(type, init); this.pointerId = init && init.pointerId != null ? init.pointerId : 1; }
+    };
+  }
+  canvas.setPointerCapture = () => {};
+  const pointer = (type, x, y) => new window.PointerEvent(type, {
+    bubbles: true, cancelable: true, clientX: x, clientY: y, pointerId: 1
+  });
+  canvas.dispatchEvent(pointer('pointerdown', 10, 20));
+  canvas.dispatchEvent(pointer('pointermove', 60, 70));
+  canvas.dispatchEvent(pointer('pointerup', 60, 70));
   await sleep(20);
   check('框选后显示选区信息', $$('#wm-sel-info .wm-sel-chip').length === 4,
+    String($$('#wm-sel-info .wm-sel-chip').length));
+  // 回归：.wm-sel 的样式表默认 display:none，选区框必须显式设为 block 才可见
+  check('选区框可见（display 非 none）', $('#wm-sel').style.display === 'block', $('#wm-sel').style.display);
+  check('选区框位置正确', $('#wm-sel').style.left === '10px' && $('#wm-sel').style.top === '20px'
+    && $('#wm-sel').style.width === '50px' && $('#wm-sel').style.height === '50px',
+    `${$('#wm-sel').style.left}/${$('#wm-sel').style.top}/${$('#wm-sel').style.width}/${$('#wm-sel').style.height}`);
+
+  // 回归：选区太小应给出提示而不是静默清空
+  canvas.dispatchEvent(pointer('pointerdown', 200, 200));
+  canvas.dispatchEvent(pointer('pointerup', 201, 201));
+  await sleep(20);
+  check('选区过小时给出提示', statusText().includes('选区太小'), statusText());
+  check('选区过小时选区框隐藏', $('#wm-sel').style.display === 'none', $('#wm-sel').style.display);
+
+  // 重新框选，供后续修复流程使用
+  canvas.dispatchEvent(pointer('pointerdown', 10, 20));
+  canvas.dispatchEvent(pointer('pointermove', 60, 70));
+  canvas.dispatchEvent(pointer('pointerup', 60, 70));
+  await sleep(20);
+  check('可重新框选', $$('#wm-sel-info .wm-sel-chip').length === 4,
     String($$('#wm-sel-info .wm-sel-chip').length));
 
   // 切换补片模式应显示偏移字段

@@ -9,6 +9,7 @@
 
   // 模块级状态：跨渲染保留，destroy() 负责清理全局监听
   let keyHandler = null;
+  let globalHandlers = null;
 
   function render(root) {
     root.innerHTML = '';
@@ -207,13 +208,14 @@
       });
     }
 
-    /* --- 框选交互 --- */
+    /* --- 框选交互 ---
+       用 Pointer Events 统一鼠标 / 触摸 / 手写笔，兼顾移动端 */
     function canvasPoint(evt) {
       const rect = canvas.getBoundingClientRect();
       const scaleX = canvas.width / (rect.width || canvas.width);
       const scaleY = canvas.height / (rect.height || canvas.height);
-      const clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
-      const clientY = evt.touches ? evt.touches[0].clientY : evt.clientY;
+      const clientX = evt.clientX;
+      const clientY = evt.clientY;
       return {
         x: Math.round((clientX - rect.left) * scaleX),
         y: Math.round((clientY - rect.top) * scaleY)
@@ -226,23 +228,30 @@
       const stageRect = stage.getBoundingClientRect();
       const sx = rect.width / (canvas.width || 1);
       const sy = rect.height / (canvas.height || 1);
-      selBox.style.display = '';
+      // 注意: 不能写成 ''，那会回落到样式表里的 .wm-sel { display: none }
+      selBox.style.display = 'block';
       selBox.style.left = (rect.left - stageRect.left + selection.x * sx) + 'px';
       selBox.style.top = (rect.top - stageRect.top + selection.y * sy) + 'px';
       selBox.style.width = (selection.width * sx) + 'px';
       selBox.style.height = (selection.height * sy) + 'px';
     }
 
-    canvas.addEventListener('mousedown', function (e) {
-      if (!workingCanvas) return;
-      e.preventDefault();
+    function beginDrag(e) {
+      if (!workingCanvas) {
+        setStatus('✗ 请先上传图片，再框选水印区域', 'err');
+        return;
+      }
+      if (e.cancelable) e.preventDefault();
       dragging = true;
       dragStart = canvasPoint(e);
       selection = { x: dragStart.x, y: dragStart.y, width: 0, height: 0 };
       showSelBox();
-    });
-    global.addEventListener('mousemove', function (e) {
+      updateSelInfo();
+    }
+
+    function moveDrag(e) {
       if (!dragging) return;
+      if (e.cancelable) e.preventDefault();
       const p = canvasPoint(e);
       selection = {
         x: Math.min(dragStart.x, p.x),
@@ -252,16 +261,55 @@
       };
       showSelBox();
       updateSelInfo();
-    });
-    global.addEventListener('mouseup', function () {
+    }
+
+    function endDrag() {
       if (!dragging) return;
       dragging = false;
       if (selection && (selection.width < 3 || selection.height < 3)) {
+        // 选区太小：保留提示而不是静默清空，让用户知道为什么没生效
         selection = null;
         showSelBox();
+        updateSelInfo();
+        setStatus('选区太小，请重新拖拽一个更大的区域', 'info');
+        return;
       }
       updateSelInfo();
+    }
+
+    // Pointer Events：一次注册同时覆盖鼠标与触摸
+    canvas.addEventListener('pointerdown', function (e) {
+      beginDrag(e);
+      // 捕获指针，指针移出画布也能继续拖
+      if (canvas.setPointerCapture && e.pointerId !== undefined) {
+        try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* 忽略 */ }
+      }
     });
+    canvas.addEventListener('pointermove', moveDrag);
+    canvas.addEventListener('pointerup', endDrag);
+    canvas.addEventListener('pointercancel', endDrag);
+    // 兜底：部分环境只有鼠标事件
+    canvas.addEventListener('mousedown', function (e) {
+      if (window.PointerEvent) return;
+      beginDrag(e);
+    });
+    // 注册到 window 的监听统一登记，destroy() 时移除，避免反复进出页面累积
+    globalHandlers = [];
+    [
+      ['mousemove', function (e) {
+        if (window.PointerEvent) return;
+        moveDrag(e);
+      }],
+      ['mouseup', function () {
+        if (window.PointerEvent) return;
+        endDrag();
+      }]
+    ].forEach(function (pair) {
+      global.addEventListener(pair[0], pair[1]);
+      globalHandlers.push({ type: pair[0], fn: pair[1] });
+    });
+    // 防止拖动时页面滚动 / 选中文本
+    canvas.addEventListener('dragstart', function (e) { e.preventDefault(); });
 
     /* --- 自动检测 --- */
     function doDetect() {
@@ -404,6 +452,12 @@
     if (keyHandler) {
       document.removeEventListener('keydown', keyHandler);
       keyHandler = null;
+    }
+    if (globalHandlers) {
+      globalHandlers.forEach(function (h) {
+        global.removeEventListener(h.type, h.fn);
+      });
+      globalHandlers = null;
     }
   }
 
