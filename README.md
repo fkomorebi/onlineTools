@@ -8,6 +8,16 @@
 
 ![首页](test/shots/01-home.png)
 
+## 🏠 首页导航
+
+首页不只是把工具堆成一列，而是提供三种找工具的方式：
+
+- **搜索框**：输入关键字即时过滤，支持工具名、描述、关键词与分类名（命中后自动切回「全部」，保证搜索覆盖所有工具）
+- **分类筛选**：13 个工具按 **文本与数据 / 图片处理 / 开发调试 / 设计与安全** 四类分组，每个分类按钮带工具数量
+- **常用入口**：顶部一行快捷 chip，直达高频工具（JSON、图片压缩、格式转换、时间格式化、文本对比、正则）
+
+工具清单集中在 `assets/js/tools.js` 一处维护，首页分组、搜索和命令面板共用同一份数据，不会出现"首页有但命令面板搜不到"的情况。
+
 ## ✨ 功能
 
 | 工具 | 说明 |
@@ -243,7 +253,7 @@ npm test           # 全部测试
 
 | 命令 | 说明 |
 |------|------|
-| `npm run test:dom` | 437 项 DOM 集成测试 —— 在 jsdom 中加载真实页面并驱动真实代码 |
+| `npm run test:dom` | 454 项 DOM 集成测试 —— 在 jsdom 中加载真实页面并驱动真实代码 |
 | `npm run test:encode` | 18 项真实编解码测试 —— 用 sharp 生成/校验真实 PNG/WebP/JPEG 字节 |
 | `npm run test:gif` | 47 项 GIF 编码测试 —— 用 sharp（libgif）校验自研 GIF89a 编码器输出的真实字节 |
 | `npm run test:browser` | 54 项真实浏览器测试 —— 需要先启动无头 Edge（见下） |
@@ -276,7 +286,8 @@ npm run test:browser
 │   ├── css/style.css             全部样式（深色主题）
 │   └── js/
 │       ├── util.js               通用工具函数（字节格式化、下载、剪贴板等）
-│       ├── home.js               首页
+│       ├── tools.js              工具注册表（唯一数据源：分类 / 关键词 / 搜索）
+│       ├── home.js               首页（分类导航 + 搜索 + 常用入口）
 │       ├── about.js              关于页
 │       ├── json.js               JSON 格式化工具
 │       ├── image-core.js         图片处理核心（Canvas 编码 / 目标体积二分）
@@ -315,6 +326,7 @@ npm run test:browser
     ├── browser-watermark.js      浏览器图片去水印验证（真实像素比对）
     ├── check-workflow.ps1        校验 Actions 版本（Node 24）
     └── shot2.js                  截图脚本
+    └── shot-home.js              首页导航截图脚本（分类 / 搜索 / 移动端）
 ```
 
 ## 🛡️ 隐私

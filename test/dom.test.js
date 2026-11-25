@@ -155,6 +155,7 @@ function attachFiles(input, fileList) {
 // 注入脚本
 const scripts = [
   'assets/js/util.js',
+  'assets/js/tools.js',
   'assets/js/home.js',
   'assets/js/about.js',
   'assets/js/json.js',
@@ -1148,6 +1149,56 @@ const statusText = (sel) => {
   check('首页功能介绍区块', $$('.feature').length === 4);
   check('首页导航不高亮任何项', $$('.nav a.active').length === 0);
   check('首页含快捷键说明', $$('.kbd-row').length >= 2, String($$('.kbd-row').length));
+
+  /* ---- 首页导航：分类 / 搜索 / 快捷入口 ---- */
+  check('首页按分类分组展示', $$('.cat-section').length === 4, String($$('.cat-section').length));
+  check('首页分类按钮齐全', $$('#catBar .cat-btn').length === 5, String($$('#catBar .cat-btn').length));
+  check('首页有搜索框', !!$('#homeSearch'));
+  check('首页有常用工具快捷入口', $$('.quick-chip').length >= 6, String($$('.quick-chip').length));
+
+  // 点击「图片处理」分类 → 只剩图片类工具
+  const imageCatBtn = $$('#catBar .cat-btn').find(b => b.getAttribute('data-cat') === 'image');
+  check('分类按钮带 data-cat', !!imageCatBtn);
+  imageCatBtn.click();
+  await sleep(50);
+  check('按分类筛选图片工具', $$('.tool-card').length === 4, String($$('.tool-card').length));
+  check('筛选后仅剩图片工具',
+    $$('.tool-card').every(c => c.querySelector('.tool-card-cat').textContent === '图片处理'));
+  check('分类筛选后按钮高亮', imageCatBtn.classList.contains('active'));
+
+  // 搜索「时间戳」→ 只命中时间格式化（关键词匹配）
+  const searchInput = $('#homeSearch');
+  searchInput.value = '时间戳';
+  searchInput.dispatchEvent(new window.Event('input'));
+  await sleep(200);
+  check('首页搜索过滤生效', $$('.tool-card').length === 1, String($$('.tool-card').length));
+  check('搜索命中时间格式化',
+    $$('.tool-card').length === 1 && $('.tool-card h3').textContent === '时间格式化');
+  check('搜索结果显示计数', $('#homeCount').textContent.includes('找到'));
+
+  // 搜索「时间」→ 命中时间格式化 + 密码生成器（描述含「破解时间」）
+  searchInput.value = '时间';
+  searchInput.dispatchEvent(new window.Event('input'));
+  await sleep(200);
+  check('搜索按描述匹配多个工具', $$('.tool-card').length === 2, String($$('.tool-card').length));
+
+  // 搜索无结果 → 空状态
+  searchInput.value = 'zzzz-not-exist';
+  searchInput.dispatchEvent(new window.Event('input'));
+  await sleep(200);
+  check('搜索无结果显示空状态', !!$('.empty-state'));
+
+  // 清空搜索 → 恢复全部
+  searchInput.value = '';
+  searchInput.dispatchEvent(new window.Event('input'));
+  await sleep(200);
+  check('清空搜索恢复全部工具', $$('.tool-card').length === 13, String($$('.tool-card').length));
+
+  // 工具注册表
+  check('工具注册表有 13 个工具', window.ToolRegistry.tools.length === 13);
+  check('注册表分类可分组', window.ToolRegistry.grouped(window.ToolRegistry.tools).length === 4);
+  check('注册表搜索命中关键词',
+    window.ToolRegistry.search('时间戳').some(t => t.route === '#/datetime'));
 
   window.location.hash = '#/about';
   window.dispatchEvent(new window.HashChangeEvent('hashchange'));

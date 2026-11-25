@@ -6,24 +6,20 @@
   'use strict';
 
   const { el } = global.U;
+  const registry = global.ToolRegistry;
 
-  // 工具清单：与首页工具卡片保持一致
-  const TOOLS = [
-    { icon: '📋', route: '#/json', title: 'JSON 格式化', desc: '格式化 / 压缩 / 校验 / 树形浏览' },
-    { icon: '🗜️', route: '#/image', title: '图片压缩', desc: '批量压缩，WebP / JPEG 输出' },
-    { icon: '🔄', route: '#/convert', title: '格式转换', desc: 'PNG / WebP / JPEG 互转' },
-    { icon: '🎞️', route: '#/gif', title: 'GIF 制作', desc: '多图合成动画 GIF' },
-    { icon: '🕒', route: '#/datetime', title: '时间格式化', desc: '时区 / ISO / Unix 时间戳' },
-    { icon: '🔍', route: '#/diff', title: '文本差异对比', desc: '逐行对比与字符级高亮' },
-    { icon: '🔐', route: '#/password', title: '密码生成器', desc: '高强度密码与熵值' },
-    { icon: '🎨', route: '#/color', title: '颜色工具', desc: '色彩空间互转与对比度' },
-    { icon: '🔗', route: '#/url', title: 'URL 解析', desc: '拆解 URL 与查询参数' },
-    { icon: '📊', route: '#/csv', title: 'CSV ⇄ JSON', desc: '表格数据互转' },
-    { icon: '🔣', route: '#/encode', title: '编码转换', desc: 'Base64 / URL / Hex 编码' },
-    { icon: '🎯', route: '#/regex', title: '正则测试台', desc: '实时匹配与表达式拆解' },
-    { icon: '🧽', route: '#/watermark', title: '图片去水印', desc: '框选水印并重建像素' },
-    { icon: 'ℹ️', route: '#/about', title: '关于', desc: '项目说明与隐私' }
-  ];
+  // 工具清单来自共享注册表（与首页卡片保持一致），额外附加「关于」入口
+  const TOOLS = registry.tools.map(function (t) {
+    return {
+      icon: t.icon,
+      route: t.route,
+      title: t.title,
+      desc: t.desc,
+      keywords: t.keywords,
+      category: t.category
+    };
+  });
+  TOOLS.push({ icon: 'ℹ️', route: '#/about', title: '关于', desc: '项目说明与隐私', keywords: '关于 说明 隐私 介绍' });
 
   let overlay = null;
   let input = null;
@@ -39,12 +35,14 @@
     TOOLS.forEach(function (t) {
       const title = t.title.toLowerCase();
       const desc = t.desc.toLowerCase();
+      const keywords = String(t.keywords || '').toLowerCase();
       let score = -1;
       if (title === q) score = 0;
       else if (title.indexOf(q) === 0) score = 1;
       else if (title.indexOf(q) !== -1) score = 2;
-      else if (desc.indexOf(q) !== -1) score = 3;
-      else if (t.route.indexOf(q) !== -1) score = 4;
+      else if (keywords.indexOf(q) !== -1) score = 3;
+      else if (desc.indexOf(q) !== -1) score = 4;
+      else if (t.route.indexOf(q) !== -1) score = 5;
       if (score !== -1) scored.push({ tool: t, score: score });
     });
     scored.sort(function (a, b) { return a.score - b.score; });
