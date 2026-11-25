@@ -1624,6 +1624,7 @@ const statusText = (sel) => {
   check('应用修复成功', statusText().includes('✓'), statusText());
   check('修复后结果区可见', $('#wm-compare-card').style.display !== 'none');
   check('修复后统计有数据', $$('#wm-stats .stat').length === 4, String($$('#wm-stats .stat').length));
+  check('修复方式显示中文名', $('#wm-stats').textContent.includes('邻域均值'), $('#wm-stats').textContent);
 
   // 下载
   const downloadsBefore = downloads.length;
@@ -1671,6 +1672,103 @@ const statusText = (sel) => {
     Wm.detectWatermark(makeImage(40, 40, [120, 120, 120]), {}).length === 0);
   const wmRegions = Wm.detectWatermark(im, {});
   check('WatermarkCore detectWatermark 返回数组', Array.isArray(wmRegions));
+
+  /* --- 核心算法质量：修复后不能糊成一块纯色 --- */
+  // 造一张上下渐变的图，在中间盖一块半透明色块当水印
+  function makeGradientImage(w, h) {
+    const data = new Uint8ClampedArray(w * h * 4);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4;
+        const v = 40 + (y / h) * 160;
+        data[i] = v; data[i + 1] = v * 0.7; data[i + 2] = 120 - (y / h) * 60; data[i + 3] = 255;
+      }
+    }
+    return { data, width: w, height: h };
+  }
+  function stampBlock(img, x0, y0, w, h) {
+    for (let y = y0; y < y0 + h; y++) {
+      for (let x = x0; x < x0 + w; x++) {
+        const i = (y * img.width + x) * 4;
+        img.data[i] = Math.min(255, img.data[i] * 0.4 + 200);
+        img.data[i + 1] = Math.min(255, img.data[i + 1] * 0.4 + 60);
+        img.data[i + 2] = Math.min(255, img.data[i + 2] * 0.4 + 60);
+      }
+    }
+  }
+  function regionStd(img, r) {
+    const vals = [];
+    for (let y = r.y; y < r.y + r.height; y++) {
+      for (let x = r.x; x < r.x + r.width; x++) vals.push(img.data[(y * img.width + x) * 4]);
+    }
+    const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
+    const varr = vals.reduce((a, b) => a + (b - mean) * (b - mean), 0) / vals.length;
+    return Math.sqrt(varr);
+  }
+  function rmseOf(result, truth, r) {
+    let e = 0, n = 0;
+    for (let y = r.y; y < r.y + r.height; y++) {
+      for (let x = r.x; x < r.x + r.width; x++) {
+        const i = (y * truth.width + x) * 4;
+        for (let c = 0; c < 3; c++) { const d = result.data[i + c] - truth.data[i + c]; e += d * d; n++; }
+      }
+    }
+    return Math.sqrt(e / n);
+  }
+
+  const gradTruth = makeGradientImage(120, 90);
+  const gradRegion = { x: 30, y: 25, width: 40, height: 25 };
+
+  // 边界扩散：应保留渐变，不是纯色块
+  const gradInpaint = makeGradientImage(120, 90);
+  stampBlock(gradInpaint, gradRegion.x, gradRegion.y, gradRegion.width, gradRegion.height);
+  const inpRes = Wm.removeWatermark(gradInpaint, gradRegion, { method: 'inpaint' });
+  check('WatermarkCore 边界扩散成功', inpRes.ok === true && inpRes.method === 'inpaint', JSON.stringify(inpRes));
+  const inpStd = regionStd(gradInpaint, gradRegion);
+  check('WatermarkCore 边界扩散保留渐变（非纯色）', inpStd > 1,
+    '选区内红色标准差=' + inpStd.toFixed(2));
+  const inpRmse = rmseOf(gradInpaint, gradTruth, gradRegion);
+  check('WatermarkCore 边界扩散误差优于模糊', inpRmse < 20, 'RMSE=' + inpRmse.toFixed(2));
+
+  // 模糊：确实糊成纯色（回归对照组）
+  const gradBlur = makeGradientImage(120, 90);
+  stampBlock(gradBlur, gradRegion.x, gradRegion.y, gradRegion.width, gradRegion.height);
+  Wm.removeWatermark(gradBlur, gradRegion, { method: 'blur', radius: 8 });
+  const blurRmse = rmseOf(gradBlur, gradTruth, gradRegion);
+  check('WatermarkCore 模糊误差明显更大', blurRmse > inpRmse * 1.5,
+    `blur=${blurRmse.toFixed(2)} vs inpaint=${inpRmse.toFixed(2)}`);
+
+  // 自动补片：在重复图案上应接近完美重建
+  function makeTiled(w, h, period) {
+    const data = new Uint8ClampedArray(w * h * 4);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4;
+        const cx = (x % period < period / 2) ? 1 : 0;
+        const cy = (y % period < period / 2) ? 1 : 0;
+        const checker = (cx === cy) ? 60 : 200;
+        data[i] = checker; data[i + 1] = checker * 0.6 + 40; data[i + 2] = checker * 0.3 + 90; data[i + 3] = 255;
+      }
+    }
+    return { data, width: w, height: h };
+  }
+  const tiledTruth = makeTiled(160, 120, 36);
+  const tiledImg = makeTiled(160, 120, 36);
+  stampBlock(tiledImg, gradRegion.x, gradRegion.y, gradRegion.width, gradRegion.height);
+  const smartRes = Wm.removeWatermark(tiledImg, gradRegion, { method: 'smart' });
+  check('WatermarkCore 自动补片成功', smartRes.ok === true && smartRes.method === 'smart', JSON.stringify(smartRes));
+  check('WatermarkCore 自动补片返回取样偏移信息', /取样位置偏移/.test(smartRes.detail || ''), smartRes.detail);
+  const smartRmse = rmseOf(tiledImg, tiledTruth, gradRegion);
+  check('WatermarkCore 自动补片在重复图案上几乎无损', smartRmse < 3, 'RMSE=' + smartRmse.toFixed(2));
+
+  // 自动补片默认就是 smart
+  const defaultImg = makeTiled(160, 120, 36);
+  stampBlock(defaultImg, gradRegion.x, gradRegion.y, gradRegion.width, gradRegion.height);
+  const defaultRes = Wm.removeWatermark(defaultImg, gradRegion, {});
+  check('WatermarkCore 默认使用自动补片', defaultRes.method === 'smart', defaultRes.method);
+  check('WatermarkCore METHODS 含全部五种方式',
+    ['smart', 'inpaint', 'blur', 'median', 'patch'].every((k) => Wm.METHODS[k]),
+    Object.keys(Wm.METHODS).join(','));
 
   /* ================= 命令面板 ================= */
   console.log('\n=== 命令面板 ===');

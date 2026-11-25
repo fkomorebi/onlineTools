@@ -18,7 +18,6 @@
     head.appendChild(el('h1', { text: '图片去水印' }));
     head.appendChild(el('p', { text: '框选图片里的水印 / logo 区域，用周围像素把它重建回来；也可以一键自动检测候选水印位置。全部在本机 Canvas 上完成，图片不会上传。' }));
     root.appendChild(head);
-
     /* --- 上传区 --- */
     const dz = el('div', { class: 'dropzone', id: 'wm-drop' }, [
       el('div', { class: 'dropzone-icon', text: '🧽' }),
@@ -57,14 +56,15 @@
     const methodField = el('div', { class: 'field' });
     methodField.appendChild(el('label', { class: 'field-label', text: '修复方式' }));
     const methodSel = el('select', { id: 'wm-method' });
-    methodSel.appendChild(el('option', { value: 'blur', text: '模糊填充（纯色 / 渐变背景）' }));
-    methodSel.appendChild(el('option', { value: 'median', text: '中位数填充（有噪点的纹理）' }));
-    methodSel.appendChild(el('option', { value: 'patch', text: '补片搬运（重复图案 / 平铺背景）' }));
+    Object.keys(Core.METHODS).forEach(function (key) {
+      methodSel.appendChild(el('option', { value: key, text: Core.METHODS[key] }));
+    });
+    methodSel.value = 'smart';
     methodField.appendChild(methodSel);
-    methodField.appendChild(el('p', { class: 'hint', text: '纯色背景用模糊；照片纹理用中位数；壁纸、棋盘格这类重复图案用补片。' }));
+    methodField.appendChild(el('p', { class: 'hint', id: 'wm-method-hint', text: '' }));
     grid.appendChild(methodField);
 
-    const radiusField = el('div', { class: 'field' });
+    const radiusField = el('div', { class: 'field', id: 'wm-radius-field' });
     radiusField.appendChild(el('label', { class: 'field-label', text: '采样半径（像素）' }));
     const radiusInput = el('input', { type: 'number', id: 'wm-radius', value: '8', min: '1', max: '64', step: '1' });
     radiusField.appendChild(radiusInput);
@@ -84,7 +84,6 @@
     patchField.appendChild(patchRow);
     patchField.appendChild(el('p', { class: 'hint', text: '从选区旁边搬运像素过来。偏移量决定取样位置，可多次微调。' }));
     grid.appendChild(patchField);
-
     // 输出格式
     const fmtField = el('div', { class: 'field' });
     fmtField.appendChild(el('label', { class: 'field-label', text: '输出格式' }));
@@ -378,7 +377,7 @@
       [
         ['图片尺寸', c.width + ' × ' + c.height],
         ['修复区域', selection.width + ' × ' + selection.height],
-        ['修复方式', opts.method],
+        ['修复方式', Core.METHODS[opts.method] || opts.method],
         ['处理像素', String(r.changed)]
       ].forEach(function (pair) {
         stats.appendChild(el('div', { class: 'stat' }, [
@@ -387,7 +386,7 @@
         ]));
       });
 
-      setStatus('✓ 修复完成，可下载或继续调整参数', 'ok');
+      setStatus('✓ 修复完成（' + r.detail + '），可下载或继续调整参数', 'ok');
     }
 
     /* --- 还原 --- */
@@ -431,9 +430,23 @@
     }
 
     /* --- 方法切换 --- */
-    methodSel.addEventListener('change', function () {
-      patchField.style.display = methodSel.value === 'patch' ? '' : 'none';
-    });
+    const METHOD_HINTS = {
+      smart: '在整张图里自动寻找与选区四周最相似的区域，把真实画面搬过来。照片、壁纸这类有纹理的图首选这个。',
+      inpaint: '从选区边缘的真实像素逐层向内扩散，保留原来的明暗过渡。适合纯色或渐变背景。',
+      blur: '用周围的平均色填满选区。只在背景完全是纯色时用，否则会糊成一块色块。',
+      median: '用周围像素的中位数填满选区，能压掉噪点，但细节会被抹平。',
+      patch: '自己指定取样位置，从别处搬一块过来。适合知道水印重复出现在哪的图。'
+    };
+    const methodHint = document.getElementById('wm-method-hint');
+
+    function syncMethodUI() {
+      const v = methodSel.value;
+      patchField.style.display = v === 'patch' ? '' : 'none';
+      radiusField.style.display = (v === 'blur' || v === 'median') ? '' : 'none';
+      if (methodHint) methodHint.textContent = METHOD_HINTS[v] || '';
+    }
+    methodSel.addEventListener('change', syncMethodUI);
+    syncMethodUI();
 
     /* --- 键盘快捷：Esc 清空选区 --- */
     function onKey(e) {

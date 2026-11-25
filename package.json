@@ -10,7 +10,7 @@
     "test:dom": "node test/dom.test.js",
     "test:encode": "node test/encode.test.js",
     "test:gif": "node test/gif-encode.test.js && node test/gif-flow.test.js",
-    "test:browser": "node test/browser-image.js && node test/browser-convert.js && node test/browser-gif.js",
+    "test:browser": "node test/browser-image.js && node test/browser-convert.js && node test/browser-gif.js && node test/browser-watermark.js",
     "test:actions": "powershell -NoProfile -ExecutionPolicy Bypass -File test/check-workflow.ps1",
     "shots": "node test/shot2.js"
   },
