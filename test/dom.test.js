@@ -156,6 +156,7 @@ function attachFiles(input, fileList) {
 const scripts = [
   'assets/js/util.js',
   'assets/js/tools.js',
+  'assets/js/nav-menu.js',
   'assets/js/home.js',
   'assets/js/about.js',
   'assets/js/json.js',
@@ -590,7 +591,7 @@ const statusText = (sel) => {
   await sleep(50);
 
   check('GIF 页已渲染', !!$('#gif-drop'));
-  check('导航高亮 GIF', $('a[href="#/gif"]').classList.contains('active'));
+  check('导航高亮 GIF（下拉菜单内）', $('.nav-menu-item[href="#/gif"]').classList.contains('active'));
 
   // 添加多张图片
   const gifFiles = [
@@ -1150,7 +1151,45 @@ const statusText = (sel) => {
   check('首页导航不高亮任何项', $$('.nav a.active').length === 0);
   check('首页含快捷键说明', $$('.kbd-row').length >= 2, String($$('.kbd-row').length));
 
+  /* ---- 顶部导航：精简为常用项 + 「更多」下拉 ---- */
+  check('导航栏只保留 4 个常用工具 + 关于',
+    $$('#nav > a').length === 5, String($$('#nav > a').length));
+  check('导航栏含「更多」按钮', !!$('#navMore'));
+  check('更多按钮带 aria 属性',
+    $('#navMore').getAttribute('aria-expanded') === 'false'
+    && $('#navMore').getAttribute('aria-controls') === 'navMoreMenu');
+
+  // 打开下拉 → 按分类列出其余工具
+  $('#navMore').click();
+  await sleep(50);
+  check('更多菜单已展开', !$('#navMoreMenu').hidden);
+  check('更多按钮标记展开状态', $('#navMore').getAttribute('aria-expanded') === 'true');
+  check('更多菜单含分类标题', $$('#navMoreMenu .nav-menu-title').length === 4,
+    String($$('#navMoreMenu .nav-menu-title').length));
+  check('更多菜单列出全部工具', $$('#navMoreMenu .nav-menu-item').length === 9,
+    String($$('#navMoreMenu .nav-menu-item').length));
+  check('更多菜单含「查看全部工具」入口', !!$('.nav-menu-all'));
+
+  // 再次点击 → 收起
+  $('#navMore').click();
+  await sleep(200);
+  check('更多菜单可收起', $('#navMoreMenu').hidden);
+
+  // 点击菜单项跳转
+  $('#navMore').click();
+  await sleep(50);
+  click($('.nav-menu-item[href="#/csv"]'));
+  await sleep(80);
+  check('点击更多菜单项可跳转', window.location.hash === '#/csv', window.location.hash);
+  await sleep(200);
+  check('跳转后菜单自动关闭', $('#navMoreMenu').hidden);
+
   /* ---- 首页导航：分类 / 搜索 / 快捷入口 ---- */
+  // 回到首页继续测试（上面跳到了 #/csv）
+  window.location.hash = '#/';
+  window.dispatchEvent(new window.HashChangeEvent('hashchange'));
+  await sleep(80);
+
   check('首页按分类分组展示', $$('.cat-section').length === 4, String($$('.cat-section').length));
   check('首页分类按钮齐全', $$('#catBar .cat-btn').length === 5, String($$('#catBar .cat-btn').length));
   check('首页有搜索框', !!$('#homeSearch'));
@@ -1224,17 +1263,20 @@ const statusText = (sel) => {
   window.location.hash = '#/diff';
   window.dispatchEvent(new window.HashChangeEvent('hashchange'));
   await sleep(50);
-  check('导航高亮文本对比', $('a[href="#/diff"]').classList.contains('active'));
+  check('导航高亮文本对比（下拉菜单内）',
+    $('.nav-menu-item[href="#/diff"]').classList.contains('active'));
 
   window.location.hash = '#/password';
   window.dispatchEvent(new window.HashChangeEvent('hashchange'));
   await sleep(50);
-  check('导航高亮密码生成', $('a[href="#/password"]').classList.contains('active'));
+  check('导航高亮密码生成（下拉菜单内）',
+    $('.nav-menu-item[href="#/password"]').classList.contains('active'));
 
   window.location.hash = '#/color';
   window.dispatchEvent(new window.HashChangeEvent('hashchange'));
   await sleep(50);
-  check('导航高亮颜色工具', $('a[href="#/color"]').classList.contains('active'));
+  check('导航高亮颜色工具（下拉菜单内）',
+    $('.nav-menu-item[href="#/color"]').classList.contains('active'));
 
   /* ================= URL / Query 解析 ================= */
   console.log('\n=== URL 与参数解析 ===');

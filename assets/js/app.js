@@ -53,6 +53,9 @@
       a.classList.toggle('active', a.getAttribute('href') === entry.nav);
     });
 
+    // 「更多」下拉菜单内的高亮
+    if (global.NavMenu) global.NavMenu.setActive(entry.nav);
+
     nav.classList.remove('open');
     navToggle.setAttribute('aria-expanded', 'false');
 
