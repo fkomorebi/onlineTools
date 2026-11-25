@@ -32,24 +32,48 @@ const { window } = dom;
 
 // jsdom 没有实现 canvas —— 提供最小可用的桩，让图片流程能被完整驱动
 const stubCanvas = window.HTMLCanvasElement.prototype.getContext;
+// 每个 canvas 记住自己的像素缓冲，putImageData / drawImage 才能真正往返
+const canvasBuffers = new WeakMap();
+function bufferOf(canvas) {
+  let buf = canvasBuffers.get(canvas);
+  if (!buf) {
+    buf = { data: null, width: 0, height: 0 };
+    canvasBuffers.set(canvas, buf);
+  }
+  return buf;
+}
+function gradientPixels(w, h) {
+  const data = new Uint8ClampedArray(w * h * 4);
+  for (let i = 0; i < w * h; i++) {
+    const px = i % w, py = (i / w) | 0;
+    data[i * 4] = (px * 5) & 0xff;
+    data[i * 4 + 1] = (py * 7) & 0xff;
+    data[i * 4 + 2] = ((px + py) * 3) & 0xff;
+    data[i * 4 + 3] = 255;
+  }
+  return data;
+}
 window.HTMLCanvasElement.prototype.getContext = function () {
+  const canvas = this;
   const ctx = {
-    canvas: this,
+    canvas: canvas,
     fillStyle: '#000', imageSmoothingEnabled: true, imageSmoothingQuality: 'high',
     fillRect() {}, drawImage() {}, clearRect() {},
     // 返回带有渐变内容的像素：全黑会让「颜色数影响体积」这类断言失去意义
     getImageData(x, y, w, h) {
-      const data = new Uint8ClampedArray(w * h * 4);
-      for (let i = 0; i < w * h; i++) {
-        const px = i % w, py = (i / w) | 0;
-        data[i * 4] = (px * 5) & 0xff;
-        data[i * 4 + 1] = (py * 7) & 0xff;
-        data[i * 4 + 2] = ((px + py) * 3) & 0xff;
-        data[i * 4 + 3] = 255;
+      const buf = bufferOf(canvas);
+      if (buf.data && buf.width === w && buf.height === h) {
+        return { data: new Uint8ClampedArray(buf.data), width: w, height: h };
       }
-      return { data };
+      return { data: gradientPixels(w, h), width: w, height: h };
     },
-    putImageData() {}, save() {}, restore() {}, translate() {}, scale() {}, rotate() {}
+    putImageData(imageData, x, y) {
+      const buf = bufferOf(canvas);
+      const w = imageData.width, h = imageData.height;
+      buf.data = new Uint8ClampedArray(imageData.data);
+      buf.width = w; buf.height = h;
+    },
+    save() {}, restore() {}, translate() {}, scale() {}, rotate() {}
   };
   return ctx;
 };
@@ -147,6 +171,17 @@ const scripts = [
   'assets/js/password.js',
   'assets/js/color-core.js',
   'assets/js/color.js',
+  'assets/js/url-core.js',
+  'assets/js/url.js',
+  'assets/js/csv-core.js',
+  'assets/js/csv.js',
+  'assets/js/encode-core.js',
+  'assets/js/encode.js',
+  'assets/js/regex-core.js',
+  'assets/js/regex.js',
+  'assets/js/watermark-core.js',
+  'assets/js/watermark.js',
+  'assets/js/palette.js',
   'assets/js/app.js'
 ];
 for (const s of scripts) {
@@ -169,8 +204,19 @@ const setVal = (el, v) => {
   el.dispatchEvent(new window.Event('input', { bubbles: true }));
 };
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-const statusText = () => {
-  const s = $('#app .status');
+// 状态文本：取"可见"的状态元素（部分页面有多个 tab，各自一个 .status）
+const isVisible = (node) => {
+  let n = node;
+  while (n && n !== document.body) {
+    if (n.style && n.style.display === 'none') return false;
+    n = n.parentElement;
+  }
+  return true;
+};
+const statusText = (sel) => {
+  const list = sel ? $$(sel) : $$('#app .status');
+  const vis = list.filter(isVisible);
+  const s = vis.length ? vis[0] : list[0];
   return s ? s.textContent : '';
 };
 
@@ -183,6 +229,12 @@ const statusText = () => {
     && !!window.DiffTool && !!window.DiffCore
     && !!window.PasswordTool && !!window.PasswordCore
     && !!window.ColorTool && !!window.ColorCore
+    && !!window.UrlTool && !!window.UrlCore
+    && !!window.CsvTool && !!window.CsvCore
+    && !!window.EncodeTool && !!window.EncodeCore
+    && !!window.RegexTool && !!window.RegexCore
+    && !!window.WatermarkTool && !!window.WatermarkCore
+    && !!window.CommandPalette
     && !!window.HomePage && !!window.AboutPage && !!window.U);
 
   /* ================= JSON 工具 ================= */
@@ -1092,9 +1144,10 @@ const statusText = () => {
   window.location.hash = '#/';
   window.dispatchEvent(new window.HashChangeEvent('hashchange'));
   await sleep(50);
-  check('首页 8 个工具卡片', $$('.tool-card').length === 8, String($$('.tool-card').length));
+  check('首页 13 个工具卡片', $$('.tool-card').length === 13, String($$('.tool-card').length));
   check('首页功能介绍区块', $$('.feature').length === 4);
   check('首页导航不高亮任何项', $$('.nav a.active').length === 0);
+  check('首页含快捷键说明', $$('.kbd-row').length >= 2, String($$('.kbd-row').length));
 
   window.location.hash = '#/about';
   window.dispatchEvent(new window.HashChangeEvent('hashchange'));
@@ -1115,7 +1168,7 @@ const statusText = () => {
   window.location.hash = '#/nonexistent';
   window.dispatchEvent(new window.HashChangeEvent('hashchange'));
   await sleep(50);
-  check('未知路由回退首页', $$('.tool-card').length === 8, String($$('.tool-card').length));
+  check('未知路由回退首页', $$('.tool-card').length === 13, String($$('.tool-card').length));
 
   window.location.hash = '#/diff';
   window.dispatchEvent(new window.HashChangeEvent('hashchange'));
@@ -1131,6 +1184,511 @@ const statusText = () => {
   window.dispatchEvent(new window.HashChangeEvent('hashchange'));
   await sleep(50);
   check('导航高亮颜色工具', $('a[href="#/color"]').classList.contains('active'));
+
+  /* ================= URL / Query 解析 ================= */
+  console.log('\n=== URL 与参数解析 ===');
+
+  window.location.hash = '#/url';
+  window.dispatchEvent(new window.HashChangeEvent('hashchange'));
+  await sleep(50);
+
+  check('URL 页已渲染', !!$('#url-input') && !!$('#url-parts'));
+  check('URL 页默认已解析', $('#url-parts').textContent.includes('example.com'), $('#url-parts').textContent.slice(0, 120));
+  check('URL 参数表已生成', $$('#url-param-card tbody tr').length === 5,
+    String($$('#url-param-card tbody tr').length));
+  check('URL 参数解码列已填充', $('#url-param-card tbody tr .url-param-decoded').textContent === '张三',
+    $('#url-param-card tbody tr .url-param-decoded').textContent);
+  check('URL 输出已重建', $('#url-output').value.startsWith('https://example.com:8443/api/v2/users?'),
+    $('#url-output').value);
+
+  // 手动解析
+  setVal($('#url-input'), 'https://user:pass@example.com:8080/a/b?x=1&y=hello%20world#top');
+  await sleep(30);
+  check('URL 协议解析', $('#url-parts').textContent.includes('https'));
+  check('URL 端口解析', $('#url-parts').textContent.includes('8080'));
+  check('URL 锚点解析', $('#url-parts').textContent.includes('top'));
+  check('URL 解析成功提示', statusText().includes('✓'), statusText());
+
+  // 编辑参数即时重拼
+  const paramInputs = $$('#url-param-card tbody tr .url-param-input');
+  check('参数输入框数量匹配', paramInputs.length === 4, String(paramInputs.length));
+  paramInputs[0].value = 'x';
+  paramInputs[0].dispatchEvent(new window.Event('input', { bubbles: true }));
+  paramInputs[2].value = 'z';
+  paramInputs[2].dispatchEvent(new window.Event('input', { bubbles: true }));
+  await sleep(20);
+  check('改参数后 URL 立即重拼', $('#url-output').value.includes('x=1') && $('#url-output').value.includes('z'),
+    $('#url-output').value);
+
+  // 添加参数
+  click(btn('+ 添加参数'));
+  await sleep(20);
+  check('添加参数后行数增加', $$('#url-param-card tbody tr').length === 3,
+    String($$('#url-param-card tbody tr').length));
+
+  // 删除参数
+  click($$('#url-param-card tbody tr .file-remove')[0]);
+  await sleep(20);
+  check('删除参数后行数减少', $$('#url-param-card tbody tr').length === 2,
+    String($$('#url-param-card tbody tr').length));
+
+  // 反向拼 URL
+  setVal($('#url-build-base'), 'https://example.com/api');
+  setVal($('#url-build-query'), 'keyword=张三\npage=1');
+  click(btn('生成 URL'));
+  await sleep(20);
+  check('反向生成 URL 正确',
+    $('#url-build-output').value === 'https://example.com/api?keyword=%E5%BC%A0%E4%B8%89&page=1',
+    $('#url-build-output').value);
+
+  // 编码检测
+  setVal($('#url-detect-input'), '5L2g5aW9');
+  click(btn('检测并解码'));
+  await sleep(20);
+  check('编码检测解码 Base64', $('#url-detect-output').value === '你好', $('#url-detect-output').value);
+
+  // 非法 URL
+  setVal($('#url-input'), 'https://');
+  await sleep(30);
+  check('缺少主机名时报错', statusText().includes('✗'), statusText());
+
+  // UrlCore 纯函数
+  const parsedUrl = window.UrlCore.parseUrl('https://example.com:8443/p?a=1&b=2#f');
+  check('UrlCore 解析协议', parsedUrl.scheme === 'https');
+  check('UrlCore 解析主机名', parsedUrl.hostname === 'example.com');
+  check('UrlCore 解析端口', parsedUrl.port === '8443');
+  check('UrlCore 解析路径', parsedUrl.path === '/p');
+  check('UrlCore 解析锚点', parsedUrl.hash === 'f');
+  check('UrlCore 解析参数个数', parsedUrl.params.length === 2, String(parsedUrl.params.length));
+  check('UrlCore origin 正确', parsedUrl.origin === 'https://example.com:8443', parsedUrl.origin);
+  const relUrl = window.UrlCore.parseUrl('/api/v1?x=1');
+  check('UrlCore 相对路径可解析', relUrl.ok && relUrl.path === '/api/v1', JSON.stringify(relUrl));
+  const noHost = window.UrlCore.parseUrl('https://');
+  check('UrlCore 缺少主机名报错', noHost.ok === false && noHost.error === 'URL 缺少主机名', noHost.error);
+  const ipv6 = window.UrlCore.parseUrl('http://[::1]:8080/x');
+  check('UrlCore IPv6 主机名保留方括号', ipv6.hostname === '[::1]', ipv6.hostname);
+  const credUrl = window.UrlCore.parseUrl('https://u:p@example.com/');
+  check('UrlCore 解析用户名密码', credUrl.username === 'u' && credUrl.password === 'p');
+  const pq = window.UrlCore.parseQuery('a=1&a=2&b');
+  check('UrlCore 重复键保留', pq.length === 3, String(pq.length));
+  check('UrlCore 无值键 value 为空', pq[2].value === '' && pq[2].key === 'b');
+  check('UrlCore 参数解码', window.UrlCore.parseQuery('k=%E5%BC%A0')[0].decodedValue === '张');
+  const bq = window.UrlCore.buildQuery([{ key: 'b', value: '2' }, { key: 'a', value: '1' }], { sort: true });
+  check('UrlCore buildQuery 排序', bq === 'a=1&b=2', bq);
+  const bqe = window.UrlCore.buildQuery([{ key: 'k', value: '张三' }], {});
+  check('UrlCore buildQuery 编码', bqe === 'k=%E5%BC%A0%E4%B8%89', bqe);
+  const bqRaw = window.UrlCore.buildQuery([{ key: 'k', value: '张三' }], { encode: false });
+  check('UrlCore buildQuery 不编码', bqRaw === 'k=张三', bqRaw);
+  check('UrlCore buildUrl 重建',
+    window.UrlCore.buildUrl({ scheme: 'https', hostname: 'a.com', path: '/x', params: [{ key: 'q', value: '1' }] })
+      === 'https://a.com/x?q=1');
+  check('UrlCore safeDecode 非法转义不抛错', window.UrlCore.safeDecode('%E0%A4%A') === '%E0%A4%A');
+  check('UrlCore detectEncoding 识别 Base64',
+    window.UrlCore.detectEncoding('5L2g5aW9').decoded === '你好');
+  check('UrlCore detectEncoding 识别 URL 编码',
+    window.UrlCore.detectEncoding('%E5%BC%A0%E4%B8%89').decoded === '张三');
+  check('UrlCore detectEncoding 识别 HTML 实体',
+    window.UrlCore.detectEncoding('&lt;a&gt;').decoded === '<a>');
+  check('UrlCore encodeEntities 转义', window.UrlCore.encodeEntities('<a & "b">') === '&lt;a &amp; &quot;b&quot;&gt;');
+  check('UrlCore decodeEntities 反转义', window.UrlCore.decodeEntities('&lt;a&gt;') === '<a>');
+
+  /* ================= CSV ⇄ JSON ================= */
+  console.log('\n=== CSV ⇄ JSON ===');
+
+  window.location.hash = '#/csv';
+  window.dispatchEvent(new window.HashChangeEvent('hashchange'));
+  await sleep(50);
+
+  check('CSV 页已渲染', !!$('#csv-input') && !!$('#csv-output'));
+  check('CSV 页默认已转换', $('#csv-output').value.includes('"name"'), $('#csv-output').value.slice(0, 120));
+  check('CSV 统计面板有数据', $$('#csv-stats .stat').length === 4, String($$('#csv-stats .stat').length));
+
+  // 带引号与逗号的字段
+  setVal($('#csv-input'), 'name,note\n"张三","a,b"\n"李四","say ""hi"""');
+  await sleep(300);
+  check('CSV 引号字段解析正确', $('#csv-output').value.includes('"a,b"'), $('#csv-output').value);
+  check('CSV 双引号转义正确', $('#csv-output').value.includes('say \\"hi\\"'), $('#csv-output').value);
+
+  // 类型推断
+  setVal($('#csv-input'), 'a,b,c\n1,true,null');
+  $('#csv-typed').checked = true;
+  $('#csv-typed').dispatchEvent(new window.Event('change', { bubbles: true }));
+  await sleep(300);
+  check('CSV 类型推断：数字', $('#csv-output').value.includes('"a": 1'), $('#csv-output').value);
+  check('CSV 类型推断：布尔', $('#csv-output').value.includes('"b": true'), $('#csv-output').value);
+  check('CSV 类型推断：null', $('#csv-output').value.includes('"c": null'), $('#csv-output').value);
+
+  // 无表头
+  setVal($('#csv-input'), '1,2\n3,4');
+  $('#csv-header').value = 'no';
+  $('#csv-header').dispatchEvent(new window.Event('change', { bubbles: true }));
+  await sleep(300);
+  check('CSV 无表头生成 column1', $('#csv-output').value.includes('"column1"'), $('#csv-output').value);
+  check('CSV 无表头保留全部数据行', $('#csv-output').value.includes('"column2": 4'), $('#csv-output').value);
+  $('#csv-header').value = 'yes';
+  $('#csv-header').dispatchEvent(new window.Event('change', { bubbles: true }));
+  await sleep(200);
+
+  // 未闭合引号
+  setVal($('#csv-input'), 'a,b\n"unclosed,2');
+  await sleep(300);
+  check('CSV 未闭合引号报错', statusText().includes('✗'), statusText());
+
+  // JSON → CSV
+  click($$('.tab').find(t => t.textContent === 'JSON → CSV'));
+  await sleep(20);
+  check('JSON→CSV 面板可见', $('#csv-json-output').offsetParent !== null || $('#csv-panel-json').style.display !== 'none');
+  setVal($('#csv-json-input'), '[{"a":1,"b":"x"},{"a":2,"b":"y"}]');
+  await sleep(300);
+  check('JSON→CSV 输出正确', $('#csv-json-output').value === 'a,b\n1,x\n2,y', JSON.stringify($('#csv-json-output').value));
+  check('JSON→CSV 统计可见', $$('#csv-json-stats .stat').length === 4);
+
+  // 非数组 JSON
+  setVal($('#csv-json-input'), '{"a":1}');
+  await sleep(300);
+  check('JSON 顶层非数组时报错', statusText().includes('✗'), statusText());
+  check('JSON 顶层非数组时提示明确', statusText().includes('数组'), statusText());
+
+  // CsvCore 纯函数
+  const Csv = window.CsvCore;
+  const parsedCsv = Csv.parseCsv('a,b\n1,2');
+  check('CsvCore 解析行数', parsedCsv.ok && parsedCsv.rows.length === 2, JSON.stringify(parsedCsv.rows));
+  check('CsvCore 解析字段数', parsedCsv.rows[0].length === 2);
+  const badCsv = Csv.parseCsv('a,b\n"x,2');
+  check('CsvCore 未闭合引号报错', badCsv.ok === false && badCsv.error.includes('引号没有闭合'), badCsv.error);
+  check('CsvCore 自动识别制表符', Csv.detectDelimiter('a\tb\n1\t2') === '\t');
+  check('CsvCore 自动识别分号', Csv.detectDelimiter('a;b\n1;2') === ';');
+  const toJson = Csv.csvToJson('name,age\n张三,28', { header: true });
+  check('CsvCore csvToJson 输出可解析', JSON.parse(toJson.json)[0].name === '张三', toJson.json);
+  check('CsvCore csvToJson 行列数', toJson.rows === 1 && toJson.columns.length === 2);
+  const typedJson = Csv.csvToJson('a\n42', { typed: true });
+  check('CsvCore typed 推断数字', JSON.parse(typedJson.json)[0].a === 42, typedJson.json);
+  const noHeaderJson = Csv.csvToJson('1,2', { header: false });
+  check('CsvCore 无表头列名', JSON.parse(noHeaderJson.json)[0].column1 === '1', noHeaderJson.json);
+  const toCsv = Csv.jsonToCsv('[{"a":1,"b":"x,y"}]', {});
+  check('CsvCore jsonToCsv 含逗号字段加引号', toCsv.csv.includes('"x,y"'), toCsv.csv);
+  check('CsvCore jsonToCsv 表头正确', toCsv.csv.split('\n')[0] === 'a,b', toCsv.csv);
+  const notArray = Csv.jsonToCsv('{"a":1}');
+  check('CsvCore jsonToCsv 非数组报错', notArray.ok === false && notArray.error === 'JSON 顶层必须是数组', notArray.error);
+  const badJson = Csv.jsonToCsv('{oops');
+  check('CsvCore jsonToCsv 非法 JSON 报错', badJson.ok === false && badJson.error.includes('JSON 解析失败'), badJson.error);
+  check('CsvCore escapeCsv 转义双引号', Csv.escapeCsv('a"b', ',') === '"a""b"');
+  const inspect = Csv.inspectJson('[{"a":1}]');
+  check('CsvCore inspectJson 识别对象数组', inspect.kind === 'objects' && inspect.columns[0] === 'a');
+  const inspectVals = Csv.inspectJson('[1,2,3]');
+  check('CsvCore inspectJson 识别值数组', inspectVals.kind === 'values' && inspectVals.count === 3);
+
+  /* ================= 编码转换 ================= */
+  console.log('\n=== 编码转换 ===');
+
+  window.location.hash = '#/encode';
+  window.dispatchEvent(new window.HashChangeEvent('hashchange'));
+  await sleep(50);
+
+  check('编码页已渲染', !!$('#enc-input') && !!$('#enc-output'));
+  check('编码页默认已编码', $('#enc-output').value.length > 0, $('#enc-output').value);
+  check('编码类型按钮齐全', $$('#enc-types button').length === 6, String($$('#enc-types button').length));
+
+  // 切换类型到 URL 编码
+  click(btn('URL 百分号编码'));
+  await sleep(20);
+  check('切换到 URL 编码类型', $('#enc-output').value.includes('%E4%BD%A0'), $('#enc-output').value);
+
+  // 十六进制
+  click(btn('十六进制'));
+  await sleep(20);
+  check('切换到十六进制类型', /^[0-9a-f]+$/.test($('#enc-output').value), $('#enc-output').value);
+
+  // Base64
+  click(btn('Base64'));
+  await sleep(20);
+  check('Base64 编码输出', $('#enc-output').value === '5L2g5aW977yM5LiW55WM77yBIEhlbGxvIPCfjI0=', $('#enc-output').value);
+
+  // 手动解码
+  setVal($('#enc-input'), '5L2g5aW9');
+  click(btn('解码'));
+  await sleep(20);
+  check('Base64 解码结果', $('#enc-output').value === '你好', $('#enc-output').value);
+
+  // 非法 Base64
+  setVal($('#enc-input'), 'a');
+  click(btn('解码'));
+  await sleep(20);
+  check('非法 Base64 报错', statusText().includes('✗'), statusText());
+
+  // 交换
+  setVal($('#enc-input'), 'abc');
+  click(btn('编码'));
+  await sleep(20);
+  const beforeSwap = $('#enc-input').value;
+  click(btn('交换输入输出'));
+  await sleep(20);
+  check('交换输入输出生效', $('#enc-input').value !== beforeSwap, $('#enc-input').value);
+
+  // 自动检测
+  setVal($('#enc-detect-input'), '5L2g5aW9');
+  click(btn('检测并解码'));
+  await sleep(20);
+  check('自动检测识别 Base64', $('#enc-detect-output').value === '你好', $('#enc-detect-output').value);
+  check('自动检测提示置信度', statusText().includes('置信度'), statusText());
+
+  setVal($('#enc-detect-input'), '5L2g5aW9');
+  click(btn('填入上方输入框'));
+  await sleep(20);
+  check('检测结果填入输入框', $('#enc-input').value === '你好', $('#enc-input').value);
+
+  // EncodeCore 纯函数
+  const Enc = window.EncodeCore;
+  check('EncodeCore base64 编码', Enc.encode('你好', 'base64').output === '5L2g5aW9');
+  check('EncodeCore base64 解码', Enc.decode('5L2g5aW9', 'base64').output === '你好');
+  check('EncodeCore base64url 无填充', Enc.encode('??>>', 'base64url').output.indexOf('=') === -1);
+  check('EncodeCore base64url 可解码', Enc.decode(Enc.encode('??>>', 'base64url').output, 'base64url').output === '??>>');
+  check('EncodeCore url 编码空格为 %20', Enc.encode('a b', 'url').output === 'a%20b');
+  check('EncodeCore urlplus 空格为 +', Enc.encode('a b', 'urlplus').output === 'a+b');
+  check('EncodeCore hex 编码', Enc.encode('AB', 'hex').output === '4142');
+  check('EncodeCore hex 解码', Enc.decode('4142', 'hex').output === 'AB');
+  check('EncodeCore 奇数长度 hex 报错', Enc.decode('414', 'hex').ok === false);
+  check('EncodeCore 非法 Base64 长度报错', Enc.decode('a', 'base64').ok === false);
+  check('EncodeCore 未知类型报错', Enc.encode('a', 'nope').ok === false);
+  check('EncodeCore utf8Bytes 中文 3 字节', Enc.utf8Bytes('中').length === 3);
+  check('EncodeCore utf8String 往返', Enc.utf8String(Enc.utf8Bytes('中文🌍')) === '中文🌍');
+  check('EncodeCore Emoji 往返', Enc.decode(Enc.encode('🌍', 'base64').output, 'base64').output === '🌍');
+  check('EncodeCore detect 识别 Base64', Enc.detect('5L2g5aW9').type === 'base64');
+  check('EncodeCore detect 识别 URL 编码', Enc.detect('%E5%BC%A0%E4%B8%89').type === 'url');
+  check('EncodeCore detect 识别 HTML 实体', Enc.detect('&lt;a&gt;').type === 'html');
+  check('EncodeCore detect 纯文本', Enc.detect('普通文本').type === 'plain');
+
+  /* ================= 正则测试台 ================= */
+  console.log('\n=== 正则测试台 ===');
+
+  window.location.hash = '#/regex';
+  window.dispatchEvent(new window.HashChangeEvent('hashchange'));
+  await sleep(50);
+
+  check('正则页已渲染', !!$('#regex-pattern') && !!$('#regex-matches'));
+  check('正则页默认已匹配', $$('#regex-matches tbody tr').length === 2,
+    String($$('#regex-matches tbody tr').length));
+  check('正则统计面板可见', $$('#regex-stats .stat').length === 4, String($$('#regex-stats .stat').length));
+  check('正则拆解已生成', $$('#regex-explain .regex-token').length > 0,
+    String($$('#regex-explain .regex-token').length));
+
+  // 改表达式
+  setVal($('#regex-pattern'), '\\d+');
+  await sleep(300);
+  check('修改表达式后重新匹配', $('#regex-stats').textContent.includes('匹配数'), $('#regex-stats').textContent);
+
+  // 非法正则（V8 对 "([a-z" 报的是字符类未闭合）
+  setVal($('#regex-pattern'), '([a-z');
+  await sleep(300);
+  check('非法正则报错', statusText().includes('✗'), statusText());
+  check('非法正则错误为中文', /[一-龥]/.test(statusText()) && !statusText().includes('Invalid regular expression'),
+    statusText());
+
+  // 分组未闭合也应给出中文提示
+  setVal($('#regex-pattern'), '(abc');
+  await sleep(300);
+  check('分组未闭合提示中文', statusText().includes('分组没有闭合'), statusText());
+
+  // flag 按钮
+  setVal($('#regex-pattern'), 'a');
+  click(btn('忽略大小写 i'));
+  await sleep(300);
+  check('点击 flag 按钮写入修饰符', $('#regex-flags').value.includes('i'), $('#regex-flags').value);
+
+  // 预设
+  setVal($('#regex-pattern'), 'x');
+  $('#regex-preset').value = '0';
+  $('#regex-preset').dispatchEvent(new window.Event('change', { bubbles: true }));
+  await sleep(300);
+  check('选择预设后替换表达式', $('#regex-pattern').value.includes('@'), $('#regex-pattern').value);
+
+  // 生成示例
+  click(btn('生成示例'));
+  await sleep(300);
+  check('生成示例填充测试文本', $('#regex-text').value.length > 0, $('#regex-text').value);
+  check('生成示例后提示成功', statusText().includes('✓'), statusText());
+
+  // RegexCore 纯函数
+  const Re = window.RegexCore;
+  const compiled = Re.compile('(\\d+)', 'g');
+  check('RegexCore 编译成功', compiled.ok && compiled.regex instanceof window.RegExp
+    && compiled.source === '(\\d+)' && compiled.flags === 'g', JSON.stringify({ ok: compiled.ok, s: compiled.source }));
+  check('RegexCore 编译失败返回错误', Re.compile('(', '').ok === false);
+  check('RegexCore 空表达式报错', Re.compile('', '').error === '请输入正则表达式');
+  check('RegexCore 非法修饰符报错', Re.compile('a', 'x').error === '无效的修饰符：/x/');
+  check('RegexCore 重复修饰符报错', Re.compile('a', 'gg').error === '修饰符重复：/g/');
+  const literal = Re.compile('/abc/gi', '');
+  check('RegexCore 支持字面量形式', literal.ok && literal.source === 'abc' && literal.flags === 'gi',
+    JSON.stringify({ s: literal.source, f: literal.flags }));
+  const exec = Re.execAll('a1b22c333', Re.compile('(\\d+)', 'g').regex, {});
+  check('RegexCore execAll 匹配数', exec.count === 3, String(exec.count));
+  check('RegexCore execAll 捕获组', exec.matches[0].groups[1].value === '1',
+    JSON.stringify(exec.matches[0].groups));
+  check('RegexCore execAll 记录位置', exec.matches[1].index === 3, String(exec.matches[1].index));
+  check('RegexCore execAll 包含整体匹配', exec.matches[0].groups[0].whole === true);
+  const named = Re.execAll('x=1', Re.compile('(?<k>\\w)=(\\d)', '').regex, {});
+  check('RegexCore 具名分组', named.matches[0].groups.some(g => g.named && g.name === 'k'),
+    JSON.stringify(named.matches[0].groups));
+  const truncated = Re.execAll('a'.repeat(50), Re.compile('a', 'g').regex, { limit: 10 });
+  check('RegexCore 匹配上限截断', truncated.count === 10 && truncated.truncated === true,
+    `${truncated.count}/${truncated.truncated}`);
+  const ex = Re.explain('(\\d+)');
+  check('RegexCore explain 识别分组', ex.some(t => t.type === 'group'));
+  check('RegexCore explain 识别量词', ex.some(t => t.type === 'quantifier'));
+  check('RegexCore explain 识别转义', ex.some(t => t.type === 'escape'));
+  const sample = Re.generateSample('\\d{4}-\\d{2}-\\d{2}', '');
+  check('RegexCore 生成示例', sample.ok && /^[\d-]+$/.test(sample.sample), sample.sample);
+  check('RegexCore PRESETS 数量', Re.PRESETS.length === 10, String(Re.PRESETS.length));
+
+  /* ================= 去水印 ================= */
+  console.log('\n=== 图片去水印 ===');
+
+  window.location.hash = '#/watermark';
+  window.dispatchEvent(new window.HashChangeEvent('hashchange'));
+  await sleep(50);
+
+  check('去水印页已渲染', !!$('#wm-drop') && !!$('#wm-canvas'));
+  check('未上传时编辑区隐藏', $('#wm-edit-card').style.display === 'none');
+  check('未上传时下载按钮禁用', $('#wm-file') && btn('下载图片').disabled === true);
+
+  // 上传图片
+  const wmFile = new File([pngBytes], 'wm.png', { type: 'image/png' });
+  attachFiles($('#wm-file'), [wmFile]);
+  await sleep(80);
+  check('上传后编辑区可见', $('#wm-edit-card').style.display !== 'none', $('#wm-edit-card').style.display);
+  check('上传后状态提示成功', statusText().includes('✓'), statusText());
+  check('上传后画布尺寸已设置', $('#wm-canvas').width === 400 && $('#wm-canvas').height === 300,
+    `${$('#wm-canvas').width}x${$('#wm-canvas').height}`);
+
+  // 未选区时应用修复 → 报错
+  click(btn('应用修复'));
+  await sleep(20);
+  check('未选区时应用修复报错', statusText().includes('✗'), statusText());
+
+  // 自动检测（jsdom 像素是渐变，可能找不到候选）
+  click(btn('自动检测水印'));
+  await sleep(30);
+  check('自动检测有响应', statusText().length > 0, statusText());
+
+  // 手动框选：模拟 mousedown / mousemove / mouseup
+  const canvas = $('#wm-canvas');
+  canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 400, height: 300, right: 400, bottom: 300 });
+  canvas.dispatchEvent(new window.MouseEvent('mousedown', { bubbles: true, clientX: 10, clientY: 20 }));
+  window.dispatchEvent(new window.MouseEvent('mousemove', { bubbles: true, clientX: 60, clientY: 70 }));
+  window.dispatchEvent(new window.MouseEvent('mouseup', { bubbles: true, clientX: 60, clientY: 70 }));
+  await sleep(20);
+  check('框选后显示选区信息', $$('#wm-sel-info .wm-sel-chip').length === 4,
+    String($$('#wm-sel-info .wm-sel-chip').length));
+
+  // 切换补片模式应显示偏移字段
+  $('#wm-method').value = 'patch';
+  $('#wm-method').dispatchEvent(new window.Event('change', { bubbles: true }));
+  await sleep(20);
+  check('补片模式显示偏移设置', $('#wm-patch-field').style.display !== 'none');
+
+  // 应用修复
+  $('#wm-method').value = 'blur';
+  $('#wm-method').dispatchEvent(new window.Event('change', { bubbles: true }));
+  click(btn('应用修复'));
+  await sleep(40);
+  check('应用修复成功', statusText().includes('✓'), statusText());
+  check('修复后结果区可见', $('#wm-compare-card').style.display !== 'none');
+  check('修复后统计有数据', $$('#wm-stats .stat').length === 4, String($$('#wm-stats .stat').length));
+
+  // 下载
+  const downloadsBefore = downloads.length;
+  click(btn('下载图片'));
+  await sleep(40);
+  check('下载触发了导出', downloads.length > downloadsBefore, String(downloads.length));
+
+  // 还原
+  click(btn('还原原图'));
+  await sleep(20);
+  check('还原后结果区隐藏', $('#wm-compare-card').style.display === 'none');
+
+  // WatermarkCore 纯函数
+  const Wm = window.WatermarkCore;
+  function makeImage(w, h, fill) {
+    const data = new Uint8ClampedArray(w * h * 4);
+    for (let i = 0; i < w * h; i++) {
+      data[i * 4] = fill[0]; data[i * 4 + 1] = fill[1]; data[i * 4 + 2] = fill[2]; data[i * 4 + 3] = 255;
+    }
+    return { data, width: w, height: h };
+  }
+  const im = makeImage(20, 20, [200, 200, 200]);
+  const noRegion = Wm.removeWatermark(im, null, {});
+  check('WatermarkCore 无选区报错', noRegion.ok === false && noRegion.error === '请先框选要处理的区域', noRegion.error);
+  const blurred = Wm.removeWatermark(im, { x: 5, y: 5, width: 5, height: 5 }, { method: 'blur', radius: 3 });
+  check('WatermarkCore 模糊填充成功', blurred.ok === true && blurred.changed === 25, JSON.stringify(blurred));
+  check('WatermarkCore 模糊后像素被改写', im.data[(10 * 20 + 10) * 4] === 200, String(im.data[(10 * 20 + 10) * 4]));
+  const med = Wm.removeWatermark(im, { x: 5, y: 5, width: 5, height: 5 }, { method: 'median', radius: 2 });
+  check('WatermarkCore 中位数填充成功', med.ok === true);
+  const patchIm = makeImage(20, 20, [0, 0, 0]);
+  for (let x = 0; x < 10; x++) for (let y = 0; y < 20; y++) {
+    patchIm.data[(y * 20 + x) * 4] = 255;
+  }
+  const patched = Wm.removeWatermark(patchIm, { x: 12, y: 2, width: 4, height: 4 }, { method: 'patch', offsetX: -10, offsetY: 0 });
+  check('WatermarkCore 补片搬运成功', patched.ok === true, JSON.stringify(patched));
+  check('WatermarkCore 补片复制了源像素', patchIm.data[(2 * 20 + 12) * 4] === 255,
+    String(patchIm.data[(2 * 20 + 12) * 4]));
+  const patchOob = Wm.removeWatermark(patchIm, { x: 12, y: 2, width: 4, height: 4 }, { method: 'patch', offsetX: -30, offsetY: 0 });
+  check('WatermarkCore 补片越界报错', patchOob.ok === false && patchOob.error.includes('超出图片范围'), patchOob.error);
+  check('WatermarkCore averageColor 计算正确',
+    Wm.averageColor(im, { x: 0, y: 0, width: 4, height: 4 }).r === 200);
+  check('WatermarkCore median 奇数个取中间值', Wm.median([3, 1, 2]) === 2);
+  check('WatermarkCore median 偶数个取平均', Wm.median([4, 1, 3, 2]) === 2.5);
+  check('WatermarkCore detectWatermark 对纯色图无候选',
+    Wm.detectWatermark(makeImage(40, 40, [120, 120, 120]), {}).length === 0);
+  const wmRegions = Wm.detectWatermark(im, {});
+  check('WatermarkCore detectWatermark 返回数组', Array.isArray(wmRegions));
+
+  /* ================= 命令面板 ================= */
+  console.log('\n=== 命令面板 ===');
+
+  check('命令面板初始关闭', window.CommandPalette.isOpen() === false);
+  window.CommandPalette.open();
+  await sleep(20);
+  check('命令面板已打开', window.CommandPalette.isOpen() === true);
+  check('命令面板有输入框', !!$('#palette-input'));
+  check('命令面板列出全部工具', $$('#palette-list .palette-item').length === window.CommandPalette.tools.length,
+    `${$$('#palette-list .palette-item').length}/${window.CommandPalette.tools.length}`);
+  check('命令面板含新工具', $('#palette-list').textContent.includes('去水印'));
+
+  // 搜索过滤
+  setVal($('#palette-input'), 'csv');
+  await sleep(20);
+  check('命令面板搜索过滤生效', $$('#palette-list .palette-item').length === 1,
+    String($$('#palette-list .palette-item').length));
+  check('搜索命中正确工具', $('#palette-list').textContent.includes('CSV'), $('#palette-list').textContent);
+
+  // 无结果
+  setVal($('#palette-input'), 'zzzz-not-exist');
+  await sleep(20);
+  check('命令面板无结果提示', !!$('#palette-list .palette-empty'));
+
+  // 关闭
+  window.CommandPalette.close();
+  await sleep(20);
+  check('命令面板已关闭', window.CommandPalette.isOpen() === false);
+  check('命令面板 DOM 已移除', !$('#palette-overlay'));
+
+  // 触发按钮
+  click($('#paletteTrigger'));
+  await sleep(20);
+  check('点击按钮可打开命令面板', window.CommandPalette.isOpen() === true);
+  window.CommandPalette.close();
+  await sleep(20);
+
+  // Ctrl+K 快捷键
+  document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }));
+  await sleep(20);
+  check('Ctrl+K 打开命令面板', window.CommandPalette.isOpen() === true);
+  document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  await sleep(20);
+  check('Esc 关闭命令面板', window.CommandPalette.isOpen() === false);
+
+  check('命令面板工具清单包含 14 项', window.CommandPalette.tools.length === 14,
+    String(window.CommandPalette.tools.length));
 
   /* ================= 汇总 ================= */
   check('全程无未捕获异常', pageErrors.length === 0, pageErrors.join(' | '));

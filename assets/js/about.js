@@ -33,6 +33,9 @@
         时间戳直接来自 <code>Date.now()</code>，不经过任何服务器。</li>
         <li>文本差异对比在浏览器内计算最长公共子序列；密码由 <code>crypto.getRandomValues</code>
         本地生成；颜色格式转换与对比度计算都是纯数学运算 —— 都不上传任何输入内容。</li>
+        <li>URL 解析、CSV 转换、编码转换、正则测试全部是纯文本运算，不发任何请求。</li>
+        <li>图片去水印在 <code>Canvas</code> 上重建像素：把框选区域当作损坏区域，
+        用周围像素做模糊 / 中位数 / 补片填充，图片像素始终留在本机。</li>
         <li>本站没有后端、没有数据库、不发送任何分析事件。</li>
         <li>页面里不写 <code>localStorage</code> 或 <code>cookie</code>，刷新后一切归零。</li>
       </ul>
@@ -49,6 +52,8 @@
       <h2>快捷键</h2>
       <ul>
         <li><span class="kbd">Ctrl</span> / <span class="kbd">Cmd</span> + <span class="kbd">Enter</span> —— 格式化 JSON</li>
+        <li><span class="kbd">Ctrl</span> / <span class="kbd">Cmd</span> + <span class="kbd">K</span> —— 打开命令面板，快速搜索并跳转工具</li>
+        <li><span class="kbd">Esc</span> —— 关闭命令面板，或清除去水印工具的选区</li>
       </ul>
 
       <h2>源码与部署</h2>
@@ -77,6 +82,17 @@ python -m http.server 8080</code></pre>
         <li><code>assets/js/password.js</code> —— 密码生成器</li>
         <li><code>assets/js/color-core.js</code> —— 颜色转换核心</li>
         <li><code>assets/js/color.js</code> —— 颜色工具</li>
+        <li><code>assets/js/url-core.js</code> —— URL 解析核心</li>
+        <li><code>assets/js/url.js</code> —— URL 解析</li>
+        <li><code>assets/js/csv-core.js</code> —— CSV / JSON 转换核心</li>
+        <li><code>assets/js/csv.js</code> —— CSV ⇄ JSON</li>
+        <li><code>assets/js/encode-core.js</code> —— 编码转换核心</li>
+        <li><code>assets/js/encode.js</code> —— 编码转换</li>
+        <li><code>assets/js/regex-core.js</code> —— 正则编译与解释核心</li>
+        <li><code>assets/js/regex.js</code> —— 正则测试台</li>
+        <li><code>assets/js/watermark-core.js</code> —— 像素重建核心</li>
+        <li><code>assets/js/watermark.js</code> —— 图片去水印</li>
+        <li><code>assets/js/palette.js</code> —— 命令面板</li>
       </ul>
     `;
     card.appendChild(box);

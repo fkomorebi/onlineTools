@@ -19,6 +19,11 @@
     '#/diff': { page: () => global.DiffTool,    nav: '#/diff' },
     '#/password': { page: () => global.PasswordTool, nav: '#/password' },
     '#/color': { page: () => global.ColorTool,  nav: '#/color' },
+    '#/url': { page: () => global.UrlTool,      nav: '#/url' },
+    '#/csv': { page: () => global.CsvTool,      nav: '#/csv' },
+    '#/encode': { page: () => global.EncodeTool, nav: '#/encode' },
+    '#/regex': { page: () => global.RegexTool,   nav: '#/regex' },
+    '#/watermark': { page: () => global.WatermarkTool, nav: '#/watermark' },
     '#/about': { page: () => global.AboutPage,   nav: '#/about' }
   };
 
@@ -59,6 +64,13 @@
     const open = nav.classList.toggle('open');
     navToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
   });
+
+  const paletteTrigger = document.getElementById('paletteTrigger');
+  if (paletteTrigger && global.CommandPalette) {
+    paletteTrigger.addEventListener('click', function () {
+      global.CommandPalette.toggle();
+    });
+  }
 
   global.addEventListener('hashchange', route);
   global.addEventListener('DOMContentLoaded', route);
