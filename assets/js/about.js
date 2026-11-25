@@ -26,6 +26,8 @@
       <p>所有工具都是纯前端实现：</p>
       <ul>
         <li>图片用 <code>FileReader</code> 读取，用 <code>Canvas</code> 缩放与编码，全程在浏览器内存中完成。</li>
+        <li>动画 GIF 由页面自带的 GIF89a 编码器在浏览器内生成 —— 浏览器原生只能编码静态位图，
+        动画 GIF 的字节流是这里手写实现的，图片同样不会离开本机。</li>
         <li>JSON 用浏览器内置的 <code>JSON.parse</code> / <code>JSON.stringify</code> 处理。</li>
         <li>时间换算用浏览器内置的 <code>Date</code> 与 <code>Intl.DateTimeFormat</code>，
         时间戳直接来自 <code>Date.now()</code>，不经过任何服务器。</li>
@@ -39,6 +41,8 @@
       WebP 编码的现代浏览器 —— Chrome / Edge / Firefox / Safari 16+ 均可。
       WebP 输出依赖浏览器的 <code>canvas.toBlob('image/webp')</code> 支持度，
       主流浏览器均已原生支持。</p>
+      <p>GIF 制作不依赖任何浏览器扩展能力 —— GIF89a 编码器是页面自带的纯 JS 实现，
+      任何支持 <code>Canvas</code> 读取像素的浏览器都能用。</p>
 
       <h2>快捷键</h2>
       <ul>
@@ -61,6 +65,8 @@ python -m http.server 8080</code></pre>
         <li><code>assets/js/image-core.js</code> —— 图片处理核心</li>
         <li><code>assets/js/image.js</code> —— 图片压缩</li>
         <li><code>assets/js/convert.js</code> —— 格式转换</li>
+        <li><code>assets/js/gif-core.js</code> —— GIF89a 编码核心</li>
+        <li><code>assets/js/gif.js</code> —— GIF 制作</li>
         <li><code>assets/js/datetime-core.js</code> —— 时间格式化核心</li>
         <li><code>assets/js/datetime.js</code> —— 时间格式化</li>
       </ul>

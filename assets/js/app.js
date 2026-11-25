@@ -14,6 +14,7 @@
     '#/json':  { page: () => global.JSONTool,    nav: '#/json' },
     '#/image': { page: () => global.ImageTool,   nav: '#/image' },
     '#/convert': { page: () => global.ConvertTool, nav: '#/convert' },
+    '#/gif': { page: () => global.GifTool,    nav: '#/gif' },
     '#/datetime': { page: () => global.DateTimeTool, nav: '#/datetime' },
     '#/about': { page: () => global.AboutPage,   nav: '#/about' }
   };

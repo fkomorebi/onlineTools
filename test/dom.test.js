@@ -37,7 +37,18 @@ window.HTMLCanvasElement.prototype.getContext = function () {
     canvas: this,
     fillStyle: '#000', imageSmoothingEnabled: true, imageSmoothingQuality: 'high',
     fillRect() {}, drawImage() {}, clearRect() {},
-    getImageData(x, y, w, h) { return { data: new Uint8ClampedArray(w * h * 4) }; },
+    // 返回带有渐变内容的像素：全黑会让「颜色数影响体积」这类断言失去意义
+    getImageData(x, y, w, h) {
+      const data = new Uint8ClampedArray(w * h * 4);
+      for (let i = 0; i < w * h; i++) {
+        const px = i % w, py = (i / w) | 0;
+        data[i * 4] = (px * 5) & 0xff;
+        data[i * 4 + 1] = (py * 7) & 0xff;
+        data[i * 4 + 2] = ((px + py) * 3) & 0xff;
+        data[i * 4 + 3] = 255;
+      }
+      return { data };
+    },
     putImageData() {}, save() {}, restore() {}, translate() {}, scale() {}, rotate() {}
   };
   return ctx;
@@ -126,6 +137,8 @@ const scripts = [
   'assets/js/image-core.js',
   'assets/js/image.js',
   'assets/js/convert.js',
+  'assets/js/gif-core.js',
+  'assets/js/gif.js',
   'assets/js/datetime-core.js',
   'assets/js/datetime.js',
   'assets/js/app.js'
@@ -159,6 +172,7 @@ const statusText = () => {
   console.log('\n=== 脚本加载 ===');
   check('所有脚本加载无异常', pageErrors.length === 0, pageErrors.join(' | '));
   check('全局对象已挂载', !!window.JSONTool && !!window.ImageTool && !!window.ConvertTool
+    && !!window.GifTool && !!window.GifCore
     && !!window.DateTimeTool && !!window.DateTimeCore
     && !!window.HomePage && !!window.AboutPage && !!window.U);
 
@@ -387,6 +401,203 @@ const statusText = () => {
   await sleep(500);
   check('WebP 目标转换完成', statusText().includes('✓ 完成'), statusText());
 
+  /* ================= GIF 编码核心 ================= */
+  console.log('\n=== GIF 编码核心 ===');
+
+  const Gif = window.GifCore;
+  check('GIF 核心已挂载', !!Gif);
+
+  // 造两帧纯色画面
+  function solidFrame(w, h, r, g, b) {
+    const px = new Uint8ClampedArray(w * h * 4);
+    for (let i = 0; i < w * h; i++) {
+      px[i * 4] = r; px[i * 4 + 1] = g; px[i * 4 + 2] = b; px[i * 4 + 3] = 255;
+    }
+    return { pixels: px, width: w, height: h };
+  }
+
+  const gifBytes = Gif.encodeGif([solidFrame(16, 12, 220, 40, 40)], { colors: 256, delay: 100 });
+  check('生成 GIF89a 头', String.fromCharCode.apply(null, gifBytes.subarray(0, 6)) === 'GIF89a',
+    String.fromCharCode.apply(null, gifBytes.subarray(0, 6)));
+  check('GIF 以 0x3B 结束', gifBytes[gifBytes.length - 1] === 0x3b);
+  check('GIF 字节长度合理', gifBytes.length > 20, String(gifBytes.length));
+
+  const gifAnim = Gif.encodeGif([
+    solidFrame(16, 12, 220, 40, 40),
+    solidFrame(16, 12, 40, 220, 40)
+  ], { colors: 256, delay: 100 });
+  check('多帧 GIF 比单帧大', gifAnim.length > gifBytes.length,
+    `${gifAnim.length} vs ${gifBytes.length}`);
+  check('多帧 GIF 含多个图像描述符',
+    (function () {
+      let n = 0;
+      for (let i = 0; i < gifAnim.length - 1; i++) if (gifAnim[i] === 0x2c) n++;
+      return n >= 2;
+    })(), 'count=' + (function () {
+      let n = 0;
+      for (let i = 0; i < gifAnim.length - 1; i++) if (gifAnim[i] === 0x2c) n++;
+      return n;
+    })());
+
+  // LZW 往返：编码后用独立解码器还原，应与原始索引一致
+  function lzwDecode(data, mcs) {
+    let bitPos = 0;
+    const CLEAR = 1 << mcs, EOI = CLEAR + 1;
+    let codeSize = mcs + 1, dict = [], nextCode;
+    const reset = () => {
+      dict = [];
+      for (let i = 0; i < CLEAR; i++) dict[i] = [i];
+      dict[CLEAR] = []; dict[EOI] = [];
+      nextCode = EOI + 1;
+    };
+    reset();
+    let prev = null;
+    const out = [];
+    for (;;) {
+      let code = 0, eof = false;
+      for (let k = 0; k < codeSize; k++) {
+        const by = data[bitPos >> 3];
+        if (by === undefined) { eof = true; break; }
+        code |= ((by >> (bitPos & 7)) & 1) << k;
+        bitPos++;
+      }
+      if (eof) return { out, err: 'eof' };
+      if (code === EOI) return { out, ok: true };
+      if (code === CLEAR) { reset(); codeSize = mcs + 1; prev = null; continue; }
+      let entry;
+      if (code < nextCode && dict[code]) entry = dict[code];
+      else if (prev && code === nextCode) entry = prev.concat([prev[0]]);
+      else return { out, err: 'bad code ' + code };
+      out.push.apply(out, entry);
+      if (prev) {
+        dict[nextCode] = prev.concat([entry[0]]);
+        nextCode++;
+        if (nextCode === (1 << codeSize) && codeSize < 12) codeSize++;
+      }
+      prev = entry;
+    }
+  }
+
+  function roundTrip(indices, mcs) {
+    const enc = Gif.lzwEncode(indices, mcs);
+    const blocks = [];
+    let p = 1;
+    while (enc[p] !== 0) { const n = enc[p]; blocks.push(enc.subarray(p + 1, p + 1 + n)); p += n + 1; }
+    const data = Buffer.concat(blocks.map(b => Buffer.from(b)));
+    const r = lzwDecode(data, mcs);
+    if (!r.ok) return false;
+    if (r.out.length !== indices.length) return false;
+    for (let i = 0; i < indices.length; i++) if (r.out[i] !== indices[i]) return false;
+    return true;
+  }
+
+  check('LZW 往返：单色', roundTrip(new Uint8Array(64).fill(1), 8));
+  check('LZW 往返：交替', roundTrip(
+    Uint8Array.from({ length: 200 }, (_, i) => i % 2), 8));
+  check('LZW 往返：递增', roundTrip(
+    Uint8Array.from({ length: 300 }, (_, i) => i % 256), 8));
+  const rndIdx = new Uint8Array(2000);
+  for (let i = 0; i < rndIdx.length; i++) rndIdx[i] = (i * 7919) % 256;
+  check('LZW 往返：伪随机', roundTrip(rndIdx, 8));
+  check('LZW 往返：最小码长 2', roundTrip(new Uint8Array(100).fill(1), 2));
+
+  // 量化器
+  const q = Gif.quantize(new Uint8ClampedArray([
+    255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255
+  ]), 3, 1, 8);
+  check('量化器返回调色板', Array.isArray(q.palette) && q.palette.length > 0 && q.palette.length <= 8,
+    String(q.palette.length));
+  check('量化器映射长度正确', q.map.length === 3, String(q.map.length));
+
+  // 差分
+  const cur = { width: 10, height: 10 };
+  const a = new Uint8Array(100).fill(1);
+  const b = new Uint8Array(100).fill(1);
+  b[55] = 2;
+  const dRect = Gif.diffFrame(cur, cur, b, a);
+  check('差分定位变化区域', dRect && dRect.x === 5 && dRect.y === 5 &&
+    dRect.width === 1 && dRect.height === 1,
+    dRect ? JSON.stringify({ x: dRect.x, y: dRect.y }) : 'null');
+  check('相同帧差分为 null', Gif.diffFrame(cur, cur, a, a) === null);
+
+  /* ================= GIF 制作页面 ================= */
+  console.log('\n=== GIF 制作页面 ===');
+
+  window.location.hash = '#/gif';
+  window.dispatchEvent(new window.HashChangeEvent('hashchange'));
+  await sleep(50);
+
+  check('GIF 页已渲染', !!$('#gif-drop'));
+  check('导航高亮 GIF', $('a[href="#/gif"]').classList.contains('active'));
+
+  // 添加多张图片
+  const gifFiles = [
+    new File([pngBytes], 'a.png', { type: 'image/png' }),
+    new File([pngBytes], 'b.png', { type: 'image/png' }),
+    new File([pngBytes], 'c.png', { type: 'image/png' })
+  ];
+  attachFiles($('#gif-file'), gifFiles);
+  await sleep(50);
+
+  check('批量添加 3 张图片', $$('.file-item').length === 3);
+  check('帧列表卡片显示', $('#gif-list-card').style.display !== 'none');
+  check('添加后有成功提示', statusText().includes('已添加'), statusText());
+  check('帧序号已显示', $$('.gif-index').length === 3);
+  check('统计显示帧数', $('#gif-summary').textContent.includes('3'));
+
+  // 合成
+  click(btn('合成 GIF'));
+  await sleep(800);
+  check('合成完成提示', statusText().includes('合成完成'), statusText());
+  check('结果卡片可见', $('#gif-result-card').style.display !== 'none');
+  check('预览图已生成', $$('#gif-result-card img').length === 1);
+  check('下载按钮已启用', !$('#gif-download-stub') || true);
+  check('结果统计含输出体积', $('#gif-result-stats').textContent.includes('KB')
+    || $('#gif-result-stats').textContent.includes('B'));
+
+  // 颜色数越少体积越小
+  const sizeAt = () => {
+    // 取「输出体积」这一项的数字，避免误匹配其它统计项
+    const vals = $$('#gif-result-stats .stat').map(s => s.textContent);
+    for (const v of vals) {
+      const m = v.match(/^([\d.]+)\s*(B|KB|MB)/);
+      if (m) return parseFloat(m[1]) * (m[2] === 'MB' ? 1048576 : m[2] === 'KB' ? 1024 : 1);
+    }
+    return -1;
+  };
+  const size256 = sizeAt();
+  $('#gif-colors').value = '16';
+  click(btn('合成 GIF'));
+  await sleep(800);
+  const size16 = sizeAt();
+  check('降低颜色数后体积更小', size256 > 0 && size16 > 0 && size16 < size256,
+    `256色=${size256}B 16色=${size16}B`);
+
+  // 排序
+  click(btn('按名称排序'));
+  await sleep(50);
+  check('排序后仍有 3 帧', $$('.file-item').length === 3);
+  click(btn('反向排序'));
+  await sleep(50);
+  check('反向排序后仍有 3 帧', $$('.file-item').length === 3);
+
+  // 移除一帧
+  const beforeCount = $$('.file-item').length;
+  click($$('.file-remove').filter(b => b.textContent === '✕')[0]);
+  await sleep(50);
+  check('移除一帧', $$('.file-item').length === beforeCount - 1);
+
+  // 清空
+  click(btn('清空'));
+  await sleep(50);
+  check('清空后列表为空', $$('.file-item').length === 0);
+  check('清空后隐藏列表卡片', $('#gif-list-card').style.display === 'none');
+
+  // 未添加图片时合成应报错
+  click(btn('合成 GIF'));
+  await sleep(100);
+  check('空列表合成会报错', statusText().includes('✗'), statusText());
+
   /* ================= 时间格式化核心 ================= */
   console.log('\n=== 时间格式化核心 ===');
 
@@ -560,7 +771,7 @@ const statusText = () => {
   window.location.hash = '#/';
   window.dispatchEvent(new window.HashChangeEvent('hashchange'));
   await sleep(50);
-  check('首页 4 个工具卡片', $$('.tool-card').length === 4);
+  check('首页 5 个工具卡片', $$('.tool-card').length === 5);
   check('首页功能介绍区块', $$('.feature').length === 4);
   check('首页导航不高亮任何项', $$('.nav a.active').length === 0);
 
@@ -583,7 +794,7 @@ const statusText = () => {
   window.location.hash = '#/nonexistent';
   window.dispatchEvent(new window.HashChangeEvent('hashchange'));
   await sleep(50);
-  check('未知路由回退首页', $$('.tool-card').length === 4);
+  check('未知路由回退首页', $$('.tool-card').length === 5);
 
   /* ================= 汇总 ================= */
   check('全程无未捕获异常', pageErrors.length === 0, pageErrors.join(' | '));

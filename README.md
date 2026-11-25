@@ -13,6 +13,7 @@
 | 📋 [JSON 格式化](index.html#/json) | 格式化 / 压缩 / 校验，错误定位到行列，树形视图，路径查询（如 `$.a.b[0].c`），统计与类型分布 |
 | 🗜️ [图片压缩](index.html#/image) | 批量压缩，输出 WebP / JPEG / PNG，可指定目标体积（自动二分调质）与最大尺寸 |
 | 🔄 [格式转换](index.html#/convert) | PNG ⇄ WebP ⇄ JPEG 互转，保留透明通道，转换前后体积对比 |
+| 🎞️ [GIF 制作](index.html#/gif) | 多张图片合成动画 GIF，自研 GIF89a 编码器，可调帧延时、颜色数与尺寸压缩体积 |
 | 🕒 [时间格式化](index.html#/datetime) | 时间转 UTC / ISO 8601 / RFC / Unix 时间戳，多时区对照，自定义格式串，时间差计算 |
 
 ### JSON 格式化
@@ -40,6 +41,26 @@
 - PNG → WebP、WebP → PNG、JPEG → WebP 等互转
 - 批量处理，转换前后并排预览 + 体积对比
 - PNG 保留透明通道（alpha 精确保留）
+
+### GIF 制作
+
+把多张图片合成一段动画 GIF，**完全在浏览器里完成**。
+
+> 浏览器原生只能编码静态位图，动画 GIF 必须自己写字节 ——
+> 所以这里实现了一个完整的 GIF89a 编码器（无任何第三方依赖）。
+
+- **多图合成**：拖拽上传多张图片，可拖动排序，也可按名称排序 / 反向排序，顺序即播放顺序
+- **帧延时**：50 / 100 / 200 / 500 / 1000 ms 或自定义，单位毫秒
+- **压缩手段**（可组合）：
+  - **颜色数**：256 → 16 色，体积可降到 1/3 左右（渐变丰富的图会看出色带）
+  - **输出尺寸**：等比缩放，缩小尺寸是最有效的压缩方式
+  - **帧间差分**：只编码与上一帧不同的矩形区域，显著减少数据量
+- **尺寸不一致时**：等比缩放并留白（可自定义背景色），或拉伸铺满
+- **循环次数**：无限 / 1 / 2 / 3 / 5 次
+- 结果可直接预览动画并下载
+
+编码器内部包含：中位切分（median cut）颜色量化、GIF 变长码 LZW 压缩、
+帧间差分与矩形裁剪、Netscape 2.0 循环扩展块。
 
 ### 时间格式化
 
@@ -119,9 +140,10 @@ npm test           # 全部测试
 
 | 命令 | 说明 |
 |------|------|
-| `npm run test:dom` | 130 项 DOM 集成测试 —— 在 jsdom 中加载真实页面并驱动真实代码 |
+| `npm run test:dom` | 164 项 DOM 集成测试 —— 在 jsdom 中加载真实页面并驱动真实代码 |
 | `npm run test:encode` | 18 项真实编解码测试 —— 用 sharp 生成/校验真实 PNG/WebP/JPEG 字节 |
-| `npm run test:browser` | 28 项真实浏览器测试 —— 需要先启动无头 Edge（见下） |
+| `npm run test:gif` | 47 项 GIF 编码测试 —— 用 sharp（libgif）校验自研 GIF89a 编码器输出的真实字节 |
+| `npm run test:browser` | 40 项真实浏览器测试 —— 需要先启动无头 Edge（见下） |
 | `npm run test:actions` | 校验 workflow 用到的 GitHub Action 均不依赖 Node.js 20，并检查 build/deploy 是否拆成了两个 job |
 | `npm run shots` | 截图各页面到 `test/shots/` |
 
@@ -157,14 +179,19 @@ npm run test:browser
 │       ├── image-core.js         图片处理核心（Canvas 编码 / 目标体积二分）
 │       ├── image.js              图片压缩工具
 │       ├── convert.js            格式转换工具
+│       ├── gif-core.js           GIF89a 编码核心（量化 / LZW / 帧间差分）
+│       ├── gif.js                GIF 制作工具
 │       ├── datetime-core.js      时间格式化核心（解析 / 时区换算 / 格式串）
 │       ├── datetime.js           时间格式化工具
 │       └── app.js                哈希路由与启动
 └── test/
     ├── dom.test.js               DOM 集成测试（jsdom）
     ├── encode.test.js            真实编解码测试（sharp）
+    ├── gif-encode.test.js        GIF 编码字节测试（sharp 校验 GIF89a 输出）
+    ├── gif-flow.test.js          GIF 页面端到端流程测试（jsdom + sharp）
     ├── browser-image.js          浏览器图片压缩验证
     ├── browser-convert.js        浏览器格式转换验证
+    ├── browser-gif.js            浏览器 GIF 制作验证
     ├── check-workflow.ps1        校验 Actions 版本（Node 24）
     └── shot2.js                  截图脚本
 ```
@@ -172,6 +199,7 @@ npm run test:browser
 ## 🛡️ 隐私
 
 - 图片通过 `FileReader` 读取、`Canvas` 缩放与编码，全程在浏览器内存内完成。
+- GIF 由自研的 GIF89a 编码器在浏览器内生成，字节不上传。
 - JSON 使用浏览器内置 `JSON.parse` / `JSON.stringify`。
 - 无后端、无数据库、无分析事件、不写 `cookie` 或 `localStorage`。
 - 唯一的网络请求是加载页面本身的静态文件。

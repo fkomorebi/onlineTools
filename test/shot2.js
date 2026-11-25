@@ -20,6 +20,25 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 (async () => {
   fs.mkdirSync(OUT, { recursive: true });
+
+  // 准备截图用的 GIF 素材（3 张颜色各异的图）
+  try {
+    const sharp = require('sharp');
+    const O2 = path.join(__dirname, 'output');
+    fs.mkdirSync(O2, { recursive: true });
+    const shots = [
+      { r: 220, g: 70, b: 60 }, { r: 60, g: 190, b: 110 }, { r: 70, g: 110, b: 220 }
+    ];
+    for (let i = 0; i < shots.length; i++) {
+      const p = path.join(O2, `gif-shot-${i + 1}.png`);
+      await sharp({
+        create: { width: 480, height: 360, channels: 3, background: shots[i] }
+      }).png().toFile(p);
+    }
+  } catch (e) {
+    console.warn('生成截图素材失败（将跳过 GIF 截图）:', e.message);
+  }
+
   const version = await get(`http://127.0.0.1:${PORT}/json/version`);
   const ws = new WebSocket(version.webSocketDebuggerUrl);
   await new Promise((res, rej) => {
@@ -144,8 +163,23 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     })()`,
     wait: 4000
   });
-  await shot('07-about', '#/about');
-  await shot('08-datetime', '#/datetime', {
+  await shot('07-gif', '#/gif', {
+    files: {
+      selector: '#gif-file',
+      paths: [
+        path.join(O, 'gif-shot-1.png'),
+        path.join(O, 'gif-shot-2.png'),
+        path.join(O, 'gif-shot-3.png')
+      ]
+    },
+    script: `(() => {
+      [...document.querySelectorAll('button')].find(b=>b.textContent==='合成 GIF').click();
+      return true;
+    })()`,
+    wait: 5000
+  });
+  await shot('08-about', '#/about');
+  await shot('09-datetime', '#/datetime', {
     script: `(() => {
       const i = document.getElementById('dt-input');
       i.value = '2026-11-24 15:45:04';
@@ -153,8 +187,9 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
       return true;
     })()`
   });
-  await shot('09-mobile-home', '', { w: 390, h: 844, mobile: true });
-  await shot('10-mobile-image', '#/image', { w: 390, h: 844, mobile: true });
+  await shot('10-mobile-home', '', { w: 390, h: 844, mobile: true });
+  await shot('11-mobile-image', '#/image', { w: 390, h: 844, mobile: true });
+  await shot('12-mobile-gif', '#/gif', { w: 390, h: 844, mobile: true });
 
   console.log('\nJS 异常:', errors.length ? errors.join(' | ') : '无');
   ws.close();
