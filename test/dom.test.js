@@ -141,6 +141,12 @@ const scripts = [
   'assets/js/gif.js',
   'assets/js/datetime-core.js',
   'assets/js/datetime.js',
+  'assets/js/diff-core.js',
+  'assets/js/diff.js',
+  'assets/js/password-core.js',
+  'assets/js/password.js',
+  'assets/js/color-core.js',
+  'assets/js/color.js',
   'assets/js/app.js'
 ];
 for (const s of scripts) {
@@ -174,6 +180,9 @@ const statusText = () => {
   check('全局对象已挂载', !!window.JSONTool && !!window.ImageTool && !!window.ConvertTool
     && !!window.GifTool && !!window.GifCore
     && !!window.DateTimeTool && !!window.DateTimeCore
+    && !!window.DiffTool && !!window.DiffCore
+    && !!window.PasswordTool && !!window.PasswordCore
+    && !!window.ColorTool && !!window.ColorCore
     && !!window.HomePage && !!window.AboutPage && !!window.U);
 
   /* ================= JSON 工具 ================= */
@@ -765,13 +774,325 @@ const statusText = () => {
   await sleep(30);
   check('当前时间重置成功', statusText().includes('已重置'), statusText());
 
+  /* ================= 文本差异对比 ================= */
+  console.log('\n=== 文本差异对比 ===');
+
+  window.location.hash = '#/diff';
+  window.dispatchEvent(new window.HashChangeEvent('hashchange'));
+  await sleep(50);
+
+  check('对比页已渲染', !!$('#diff-input-a') && !!$('#diff-input-b'));
+  check('默认载入示例', $('#diff-input-a').value.length > 0);
+  check('差异行已渲染', $$('#diff-side-view .diff-row').length > 0);
+  check('存在新增行标记', $$('#diff-side-view .diff-insert').length > 0);
+  check('存在删除行标记', $$('#diff-side-view .diff-delete').length > 0);
+  check('统计面板可见', $('#diff-stats-card').style.display !== 'none');
+  check('Unified Diff 已生成', $('#diff-unified').value.includes('@@'));
+
+  // 相同文本 → 无差异
+  setVal($('#diff-input-a'), 'hello\nworld');
+  setVal($('#diff-input-b'), 'hello\nworld');
+  click(btn('对比'));
+  check('相同文本判定为完全一致', statusText().includes('完全相同'), statusText());
+  check('相同文本无新增行', $$('#diff-side-view .diff-insert').length === 0);
+
+  // 新增一行
+  setVal($('#diff-input-a'), 'a\nb');
+  setVal($('#diff-input-b'), 'a\nb\nc');
+  click(btn('对比'));
+  check('新增一行被识别', $$('#diff-side-view .diff-insert').length === 1,
+    String($$('#diff-side-view .diff-insert').length));
+  check('状态提示新增 1 行', statusText().includes('新增 1 行'), statusText());
+
+  // 删除一行
+  setVal($('#diff-input-a'), 'a\nb\nc');
+  setVal($('#diff-input-b'), 'a\nc');
+  click(btn('对比'));
+  check('删除一行被识别', $$('#diff-side-view .diff-delete').length === 1,
+    String($$('#diff-side-view .diff-delete').length));
+
+  // 字符级高亮
+  setVal($('#diff-input-a'), 'const x = 1;');
+  setVal($('#diff-input-b'), 'const x = 2;');
+  click(btn('对比'));
+  check('字符级高亮生效', $$('#diff-side-view .diff-chunk-ins').length > 0
+    || $$('#diff-side-view .diff-chunk-del').length > 0,
+    `ins=${$$('#diff-side-view .diff-chunk-ins').length} del=${$$('#diff-side-view .diff-chunk-del').length}`);
+
+  // 关闭字符级高亮
+  $('#diff-char-level').checked = false;
+  $('#diff-char-level').dispatchEvent(new window.Event('change', { bubbles: true }));
+  await sleep(20);
+  check('关闭字符高亮后无 chunk', $$('#diff-side-view .diff-chunk-ins').length === 0);
+  $('#diff-char-level').checked = true;
+  $('#diff-char-level').dispatchEvent(new window.Event('change', { bubbles: true }));
+  await sleep(20);
+
+  // 交换两边
+  setVal($('#diff-input-a'), 'one');
+  setVal($('#diff-input-b'), 'two');
+  click(btn('对比'));
+  click(btn('交换两边'));
+  check('交换两边生效', $('#diff-input-a').value === 'two' && $('#diff-input-b').value === 'one',
+    $('#diff-input-a').value + '|' + $('#diff-input-b').value);
+
+  // 清空
+  click(btn('清空'));
+  check('清空后输入框为空', $('#diff-input-a').value === '' && $('#diff-input-b').value === '');
+  check('清空后统计隐藏', $('#diff-stats-card').style.display === 'none');
+
+  // 空输入报错
+  click(btn('对比'));
+  check('空输入报错', statusText().includes('✗'), statusText());
+
+  // DiffCore 纯函数
+  const rows = window.DiffCore.diffLines('a\nb\nc', 'a\nx\nc');
+  check('DiffCore 行数正确', rows.length === 4, String(rows.length));
+  check('DiffCore 统计正确', window.DiffCore.stats(rows).added === 1
+    && window.DiffCore.stats(rows).removed === 1);
+  const chars = window.DiffCore.diffChars('abc', 'axc');
+  check('DiffCore 字符差异正确',
+    chars.left.some(c => c.type === 'del' && c.text === 'b')
+    && chars.right.some(c => c.type === 'ins' && c.text === 'x'),
+    JSON.stringify(chars));
+
+  /* ================= 密码生成器 ================= */
+  console.log('\n=== 密码生成器 ===');
+
+  window.location.hash = '#/password';
+  window.dispatchEvent(new window.HashChangeEvent('hashchange'));
+  await sleep(50);
+
+  check('密码页已渲染', !!$('#pw-text'));
+  const firstPw = $('#pw-text').textContent;
+  check('默认已生成密码', firstPw.length === 20, String(firstPw.length));
+  check('熵值已显示', $('#pw-meta').textContent.includes('bit'), $('#pw-meta').textContent);
+  check('破解时间已显示', $('#pw-meta').textContent.includes('离线破解'), $('#pw-meta').textContent);
+
+  // 重新生成 → 结果不同
+  click(btn('生成密码'));
+  const secondPw = $('#pw-text').textContent;
+  check('重新生成得到不同密码', secondPw !== firstPw && secondPw.length === 20);
+
+  // 长度控制
+  $('#pw-length').value = '32';
+  $('#pw-length').dispatchEvent(new window.Event('input', { bubbles: true }));
+  click(btn('生成密码'));
+  check('长度为 32', $('#pw-text').textContent.length === 32, String($('#pw-text').textContent.length));
+  check('长度提示同步', $('#pw-length-hint').textContent.includes('32'), $('#pw-length-hint').textContent);
+
+  // 每类字符至少一个
+  const pw32 = $('#pw-text').textContent;
+  check('包含小写字母', /[a-z]/.test(pw32));
+  check('包含大写字母', /[A-Z]/.test(pw32));
+  check('包含数字', /[0-9]/.test(pw32));
+  check('包含符号', /[^a-zA-Z0-9]/.test(pw32));
+
+  // 关闭全部字符集 → 报错
+  ['#pw-lower', '#pw-upper', '#pw-digits', '#pw-symbols'].forEach(function (sel) {
+    $(sel).checked = false;
+    $(sel).dispatchEvent(new window.Event('change', { bubbles: true }));
+  });
+  await sleep(20);
+  check('字符集为空时报错', statusText().includes('✗'), statusText());
+  ['#pw-lower', '#pw-upper', '#pw-digits', '#pw-symbols'].forEach(function (sel) {
+    $(sel).checked = true;
+    $(sel).dispatchEvent(new window.Event('change', { bubbles: true }));
+  });
+  await sleep(20);
+  check('恢复字符集后正常', !$('#pw-text').classList.contains('error'));
+
+  // 排除易混淆字符
+  $('#pw-ambiguous').checked = true;
+  $('#pw-ambiguous').dispatchEvent(new window.Event('change', { bubbles: true }));
+  await sleep(20);
+  const noAmbig = $('#pw-text').textContent;
+  check('排除易混淆字符生效', !/[Il1O0o]/.test(noAmbig), noAmbig);
+  $('#pw-ambiguous').checked = false;
+  $('#pw-ambiguous').dispatchEvent(new window.Event('change', { bubbles: true }));
+  await sleep(20);
+
+  // 自定义字符集：填写后应取代内置符号集
+  setVal($('#pw-custom'), '!@#$%');
+  await sleep(30);
+  const customPw = $('#pw-text').textContent;
+  check('自定义字符集生效（取代内置符号）',
+    /^[a-zA-Z0-9!@#$%]+$/.test(customPw), customPw);
+  check('自定义字符集后不含内置符号',
+    !/[()_=+[\]{};:,.<>?\/~]/.test(customPw), customPw);
+
+  // 自定义字符集支持中文
+  setVal($('#pw-custom'), '中文');
+  await sleep(30);
+  const cnPw = $('#pw-text').textContent;
+  check('自定义字符集支持中文', /[一-龥]/.test(cnPw), cnPw);
+  check('中文未被拆成乱码', !/[\uD800-\uDFFF]/.test(cnPw), cnPw);
+
+  // 清空自定义字符集 → 恢复内置符号
+  setVal($('#pw-custom'), '');
+  await sleep(30);
+  check('清空自定义字符集后恢复内置符号',
+    /[()_=+[\]{};:,.<>?\/~]/.test($('#pw-text').textContent), $('#pw-text').textContent);
+
+  // 批量生成
+  $('#pw-bulk-count').value = '5';
+  click(btn('批量生成'));
+  await sleep(30);
+  check('批量结果面板可见', $('#pw-bulk-card').style.display !== 'none');
+  check('批量生成 5 个', $$('#pw-bulk-card tbody tr').length === 5,
+    String($$('#pw-bulk-card tbody tr').length));
+
+  // PasswordCore 纯函数
+  const gen = window.PasswordCore.generate({ length: 12 });
+  check('PasswordCore 生成 12 位', gen.ok && gen.password.length === 12);
+  check('PasswordCore 每类至少一个',
+    /[a-z]/.test(gen.password) && /[A-Z]/.test(gen.password)
+    && /[0-9]/.test(gen.password) && /[^a-zA-Z0-9]/.test(gen.password), gen.password);
+  const short = window.PasswordCore.generate({ length: 2, requireEach: true });
+  check('长度不足时拒绝生成', short.ok === false && short.error.length > 0, short.error);
+  const entropy = window.PasswordCore.entropyBits('abcdefgh', { lower: true, upper: false, digits: false, symbols: false });
+  check('熵值计算正确', Math.abs(entropy - 8 * Math.log2(26)) < 0.001, String(entropy));
+  const weak = window.PasswordCore.weakPatterns('password123');
+  check('弱模式检测生效', weak.length > 0, JSON.stringify(weak));
+
+  // 自定义字符集（核心层）
+  const customPool = window.PasswordCore.buildPool({
+    lower: true, upper: true, digits: true, symbols: true, custom: '!@#'
+  });
+  check('自定义字符集取代内置符号',
+    customPool.indexOf('(') === -1 && customPool.indexOf('!') !== -1, customPool);
+  const cnGen = window.PasswordCore.generate({
+    length: 12, lower: true, upper: true, digits: true, symbols: false, custom: '中文'
+  });
+  check('核心层自定义中文可用', cnGen.ok && /[一-龥]/.test(cnGen.password), cnGen.password);
+  check('核心层中文不被拆分', !/[\uD800-\uDFFF]/.test(cnGen.password), cnGen.password);
+  check('自定义字符集参与熵值计算',
+    window.PasswordCore.entropyBits('abcdefgh', { custom: '中文', lower: true, upper: false, digits: false, symbols: false })
+      > 8 * Math.log2(26),
+    String(window.PasswordCore.entropyBits('abcdefgh', { custom: '中文', lower: true, upper: false, digits: false, symbols: false })));
+
+  /* ================= 颜色工具 ================= */
+  console.log('\n=== 颜色工具 ===');
+
+  window.location.hash = '#/color';
+  window.dispatchEvent(new window.HashChangeEvent('hashchange'));
+  await sleep(50);
+
+  check('颜色页已渲染', !!$('#color-hex') && !!$('#color-native'));
+  check('默认颜色已应用', $('#color-hex').value === '#4c9aff', $('#color-hex').value);
+  check('格式表已生成', $$('#color-stats-card, .table-wrap table').length > 0);
+  check('RGB 输入框已同步', $('#color-rgb').value.startsWith('rgb('), $('#color-rgb').value);
+  check('HSL 输入框已同步', $('#color-hsl').value.startsWith('hsl('), $('#color-hsl').value);
+  check('色板已生成', $$('#color-palette .swatch').length > 0,
+    String($$('#color-palette .swatch').length));
+
+  // 输入 HEX
+  setVal($('#color-hex'), '#ff0000');
+  await sleep(20);
+  check('HEX 解析正确', $('#color-rgb').value === 'rgb(255, 0, 0)', $('#color-rgb').value);
+  check('HSL 转换正确', $('#color-hsl').value === 'hsl(0, 100%, 50%)', $('#color-hsl').value);
+  check('原生取色器同步', $('#color-native').value === '#ff0000', $('#color-native').value);
+
+  // 非法颜色
+  setVal($('#color-hex'), 'not-a-color');
+  await sleep(20);
+  check('非法颜色报错', statusText().includes('✗'), statusText());
+  setVal($('#color-hex'), '#00ff00');
+  await sleep(20);
+  check('恢复合法颜色', statusText().includes('✓'), statusText());
+
+  // 对比度检查
+  $('#color-fg').value = '#ffffff';
+  $('#color-fg').dispatchEvent(new window.Event('input', { bubbles: true }));
+  $('#color-bg').value = '#000000';
+  $('#color-bg').dispatchEvent(new window.Event('input', { bubbles: true }));
+  await sleep(20);
+  const contrastText = $('#color-contrast-stats').textContent;
+  check('黑底白字对比度 21:1', contrastText.includes('21'), contrastText);
+  check('黑底白字 AA 通过', contrastText.includes('通过'), contrastText);
+
+  // 随机颜色
+  click(btn('随机颜色'));
+  await sleep(20);
+  check('随机颜色已应用', /^#[0-9a-f]{6}$/i.test($('#color-hex').value), $('#color-hex').value);
+
+  // 随机色板
+  click(btn('随机色板'));
+  await sleep(20);
+  check('随机色板已插入', $$('#color-palette .palette-block').length >= 2,
+    String($$('#color-palette .palette-block').length));
+
+  // ColorCore 纯函数
+  const parsed = window.ColorCore.parse('#4c9aff');
+  check('ColorCore 解析 hex', parsed && parsed.r === 76 && parsed.g === 154 && parsed.b === 255,
+    JSON.stringify(parsed));
+  const fromRgb = window.ColorCore.parse('rgb(76, 154, 255)');
+  check('ColorCore 解析 rgb', fromRgb && fromRgb.r === 76);
+  const fromShort = window.ColorCore.parse('#f00');
+  check('ColorCore 解析三位 hex', fromShort && fromShort.r === 255 && fromShort.g === 0);
+  const cmyk = window.ColorCore.rgbToCmyk(255, 0, 0);
+  check('CMYK 转换正确', Math.abs(cmyk.c - 0) < 0.001 && Math.abs(cmyk.k - 0) < 0.001
+    && Math.abs(cmyk.m - 1) < 0.001 && Math.abs(cmyk.y - 1) < 0.001, JSON.stringify(cmyk));
+  const wcag = window.ColorCore.wcag({ r: 255, g: 255, b: 255 }, { r: 0, g: 0, b: 0 }, 'normal');
+  check('WCAG 对比度计算正确', Math.abs(wcag.ratio - 21) < 0.01, String(wcag.ratio));
+  check('WCAG AAA 通过', wcag.aaa === true);
+  const shades = window.ColorCore.shades({ r: 76, g: 154, b: 255 }, 9);
+  check('明度阶梯生成 9 档', shades.length === 9);
+  check('明度阶梯明度递增', shades[0].level < shades[8].level,
+    `${shades[0].level}->${shades[8].level}`);
+  check('明度阶梯保留色调（不是灰阶）',
+    shades[0].hex !== shades[0].hex.toLowerCase().replace(/[0-9]/g, '0')
+    && new Set(shades.map(s => s.hex.slice(1, 3))).size > 1,
+    shades.map(s => s.hex).join(' '));
+  check('明度阶梯首档为深色', window.ColorCore.rgbToHsl(
+    shades[0].rgb.r, shades[0].rgb.g, shades[0].rgb.b).l < 25,
+    shades[0].hex);
+  check('明度阶梯末档为浅色', window.ColorCore.rgbToHsl(
+    shades[8].rgb.r, shades[8].rgb.g, shades[8].rgb.b).l > 75,
+    shades[8].hex);
+
+  // HSL 解析（百分比不应被二次除以 100）
+  const hslParsed = window.ColorCore.parse('hsl(0, 100%, 50%)');
+  check('HSL 解析红色正确',
+    hslParsed && hslParsed.r === 255 && hslParsed.g === 0 && hslParsed.b === 0,
+    JSON.stringify(hslParsed));
+  const hslParsed2 = window.ColorCore.parse('hsl(214, 100%, 65%)');
+  check('HSL 解析蓝色正确',
+    hslParsed2 && Math.abs(hslParsed2.r - 77) <= 1 && Math.abs(hslParsed2.g - 154) <= 1
+    && Math.abs(hslParsed2.b - 255) <= 1,
+    JSON.stringify(hslParsed2));
+  const hslAlpha = window.ColorCore.parse('hsla(0, 100%, 50%, 0.5)');
+  check('HSLA 解析保留透明度', hslAlpha && hslAlpha.a === 0.5 && hslAlpha.r === 255,
+    JSON.stringify(hslAlpha));
+
+  // HSL → RGB 往返
+  let hslRoundTrip = true;
+  for (let t = 0; t < 50; t++) {
+    const rr = Math.floor(Math.random() * 256);
+    const gg = Math.floor(Math.random() * 256);
+    const bb = Math.floor(Math.random() * 256);
+    const h = window.ColorCore.rgbToHsl(rr, gg, bb);
+    const back = window.ColorCore.hslToRgb(h.h, h.s, h.l);
+    if (Math.abs(back.r - rr) > 1 || Math.abs(back.g - gg) > 1 || Math.abs(back.b - bb) > 1) {
+      hslRoundTrip = false;
+      break;
+    }
+  }
+  check('HSL 往返转换无损', hslRoundTrip);
+
+  // 随机色板不应产生近乎全黑的颜色
+  const palette = window.ColorCore.randomPalette(6);
+  check('随机色板颜色可用',
+    palette.every(p => window.ColorCore.luminance(p.rgb) > 0.01),
+    palette.map(p => p.hex).join(' '));
+
   /* ================= 首页 / 关于 / 路由 ================= */
   console.log('\n=== 路由与其它页面 ===');
 
   window.location.hash = '#/';
   window.dispatchEvent(new window.HashChangeEvent('hashchange'));
   await sleep(50);
-  check('首页 5 个工具卡片', $$('.tool-card').length === 5);
+  check('首页 8 个工具卡片', $$('.tool-card').length === 8, String($$('.tool-card').length));
   check('首页功能介绍区块', $$('.feature').length === 4);
   check('首页导航不高亮任何项', $$('.nav a.active').length === 0);
 
@@ -794,7 +1115,22 @@ const statusText = () => {
   window.location.hash = '#/nonexistent';
   window.dispatchEvent(new window.HashChangeEvent('hashchange'));
   await sleep(50);
-  check('未知路由回退首页', $$('.tool-card').length === 5);
+  check('未知路由回退首页', $$('.tool-card').length === 8, String($$('.tool-card').length));
+
+  window.location.hash = '#/diff';
+  window.dispatchEvent(new window.HashChangeEvent('hashchange'));
+  await sleep(50);
+  check('导航高亮文本对比', $('a[href="#/diff"]').classList.contains('active'));
+
+  window.location.hash = '#/password';
+  window.dispatchEvent(new window.HashChangeEvent('hashchange'));
+  await sleep(50);
+  check('导航高亮密码生成', $('a[href="#/password"]').classList.contains('active'));
+
+  window.location.hash = '#/color';
+  window.dispatchEvent(new window.HashChangeEvent('hashchange'));
+  await sleep(50);
+  check('导航高亮颜色工具', $('a[href="#/color"]').classList.contains('active'));
 
   /* ================= 汇总 ================= */
   check('全程无未捕获异常', pageErrors.length === 0, pageErrors.join(' | '));

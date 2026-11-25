@@ -16,6 +16,9 @@
     '#/convert': { page: () => global.ConvertTool, nav: '#/convert' },
     '#/gif': { page: () => global.GifTool,    nav: '#/gif' },
     '#/datetime': { page: () => global.DateTimeTool, nav: '#/datetime' },
+    '#/diff': { page: () => global.DiffTool,    nav: '#/diff' },
+    '#/password': { page: () => global.PasswordTool, nav: '#/password' },
+    '#/color': { page: () => global.ColorTool,  nav: '#/color' },
     '#/about': { page: () => global.AboutPage,   nav: '#/about' }
   };
 

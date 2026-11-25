@@ -12,7 +12,7 @@
     const hero = el('div', { class: 'hero' });
     hero.appendChild(el('h1', { text: '🧰 干净的在线工具箱' }));
     hero.appendChild(el('p', {
-      text: 'JSON 格式化、图片压缩、格式转换、GIF 制作、时间格式化 —— 没有广告、没有弹窗、没有追踪。所有计算都在你的浏览器里完成。'
+      text: 'JSON 格式化、图片压缩、格式转换、GIF 制作、时间格式化、文本对比、密码生成、颜色工具 —— 没有广告、没有弹窗、没有追踪。所有计算都在你的浏览器里完成。'
     }));
     root.appendChild(hero);
 
@@ -37,6 +37,18 @@
       {
         icon: '🕒', route: '#/datetime', title: '时间格式化',
         desc: '时间转 UTC、ISO 8601、RFC、Unix 时间戳，多时区对照与自定义格式串。'
+      },
+      {
+        icon: '🔍', route: '#/diff', title: '文本差异对比',
+        desc: '逐行比较两段文本，标记新增 / 删除 / 修改，支持行内字符级高亮。'
+      },
+      {
+        icon: '🔐', route: '#/password', title: '密码生成器',
+        desc: '用密码学随机源生成高强度密码，显示熵值与估算破解时间，可批量导出。'
+      },
+      {
+        icon: '🎨', route: '#/color', title: '颜色工具',
+        desc: 'HEX / RGB / HSL / CMYK 互转，生成明度阶梯与和谐色板，WCAG 对比度检查。'
       }
     ];
     tools.forEach(function (t) {

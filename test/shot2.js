@@ -190,6 +190,14 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   await shot('10-mobile-home', '', { w: 390, h: 844, mobile: true });
   await shot('11-mobile-image', '#/image', { w: 390, h: 844, mobile: true });
   await shot('12-mobile-gif', '#/gif', { w: 390, h: 844, mobile: true });
+  await shot('13-diff', '#/diff', {
+    script: `(() => {
+      [...document.querySelectorAll('button')].find(b=>b.textContent==='对比').click();
+      return true;
+    })()`
+  });
+  await shot('14-password', '#/password');
+  await shot('15-color', '#/color');
 
   console.log('\nJS 异常:', errors.length ? errors.join(' | ') : '无');
   ws.close();
