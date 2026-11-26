@@ -183,6 +183,8 @@ const scripts = [
   'assets/js/regex.js',
   'assets/js/watermark-core.js',
   'assets/js/watermark.js',
+  'assets/js/audio-core.js',
+  'assets/js/audio.js',
   'assets/js/palette.js',
   'assets/js/app.js'
 ];
@@ -1146,7 +1148,7 @@ const statusText = (sel) => {
   window.location.hash = '#/';
   window.dispatchEvent(new window.HashChangeEvent('hashchange'));
   await sleep(50);
-  check('首页 13 个工具卡片', $$('.tool-card').length === 13, String($$('.tool-card').length));
+  check('首页 14 个工具卡片', $$('.tool-card').length === 14, String($$('.tool-card').length));
   check('首页功能介绍区块', $$('.feature').length === 4);
   check('首页导航不高亮任何项', $$('.nav a.active').length === 0);
   check('首页含快捷键说明', $$('.kbd-row').length >= 2, String($$('.kbd-row').length));
@@ -1164,9 +1166,9 @@ const statusText = (sel) => {
   await sleep(50);
   check('更多菜单已展开', !$('#navMoreMenu').hidden);
   check('更多按钮标记展开状态', $('#navMore').getAttribute('aria-expanded') === 'true');
-  check('更多菜单含分类标题', $$('#navMoreMenu .nav-menu-title').length === 4,
+  check('更多菜单含分类标题', $$('#navMoreMenu .nav-menu-title').length === 5,
     String($$('#navMoreMenu .nav-menu-title').length));
-  check('更多菜单列出全部工具', $$('#navMoreMenu .nav-menu-item').length === 9,
+  check('更多菜单列出全部工具', $$('#navMoreMenu .nav-menu-item').length === 10,
     String($$('#navMoreMenu .nav-menu-item').length));
   check('更多菜单含「查看全部工具」入口', !!$('.nav-menu-all'));
 
@@ -1190,8 +1192,8 @@ const statusText = (sel) => {
   window.dispatchEvent(new window.HashChangeEvent('hashchange'));
   await sleep(80);
 
-  check('首页按分类分组展示', $$('.cat-section').length === 4, String($$('.cat-section').length));
-  check('首页分类按钮齐全', $$('#catBar .cat-btn').length === 5, String($$('#catBar .cat-btn').length));
+  check('首页按分类分组展示', $$('.cat-section').length === 5, String($$('.cat-section').length));
+  check('首页分类按钮齐全', $$('#catBar .cat-btn').length === 6, String($$('#catBar .cat-btn').length));
   check('首页有搜索框', !!$('#homeSearch'));
   check('首页有常用工具快捷入口', $$('.quick-chip').length >= 6, String($$('.quick-chip').length));
 
@@ -1231,11 +1233,11 @@ const statusText = (sel) => {
   searchInput.value = '';
   searchInput.dispatchEvent(new window.Event('input'));
   await sleep(200);
-  check('清空搜索恢复全部工具', $$('.tool-card').length === 13, String($$('.tool-card').length));
+  check('清空搜索恢复全部工具', $$('.tool-card').length === 14, String($$('.tool-card').length));
 
   // 工具注册表
-  check('工具注册表有 13 个工具', window.ToolRegistry.tools.length === 13);
-  check('注册表分类可分组', window.ToolRegistry.grouped(window.ToolRegistry.tools).length === 4);
+  check('工具注册表有 14 个工具', window.ToolRegistry.tools.length === 14);
+  check('注册表分类可分组', window.ToolRegistry.grouped(window.ToolRegistry.tools).length === 5);
   check('注册表搜索命中关键词',
     window.ToolRegistry.search('时间戳').some(t => t.route === '#/datetime'));
 
@@ -1258,7 +1260,7 @@ const statusText = (sel) => {
   window.location.hash = '#/nonexistent';
   window.dispatchEvent(new window.HashChangeEvent('hashchange'));
   await sleep(50);
-  check('未知路由回退首页', $$('.tool-card').length === 13, String($$('.tool-card').length));
+  check('未知路由回退首页', $$('.tool-card').length === 14, String($$('.tool-card').length));
 
   window.location.hash = '#/diff';
   window.dispatchEvent(new window.HashChangeEvent('hashchange'));
@@ -1908,7 +1910,7 @@ const statusText = (sel) => {
   await sleep(20);
   check('Esc 关闭命令面板', window.CommandPalette.isOpen() === false);
 
-  check('命令面板工具清单包含 14 项', window.CommandPalette.tools.length === 14,
+  check('命令面板工具清单包含 15 项', window.CommandPalette.tools.length === 15,
     String(window.CommandPalette.tools.length));
 
   /* ================= 汇总 ================= */

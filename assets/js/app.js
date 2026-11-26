@@ -24,6 +24,7 @@
     '#/encode': { page: () => global.EncodeTool, nav: '#/encode' },
     '#/regex': { page: () => global.RegexTool,   nav: '#/regex' },
     '#/watermark': { page: () => global.WatermarkTool, nav: '#/watermark' },
+    '#/audio': { page: () => global.AudioTool,  nav: '#/audio' },
     '#/about': { page: () => global.AboutPage,   nav: '#/about' }
   };
 

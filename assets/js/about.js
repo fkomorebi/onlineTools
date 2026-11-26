@@ -36,6 +36,9 @@
         <li>URL 解析、CSV 转换、编码转换、正则测试全部是纯文本运算，不发任何请求。</li>
         <li>图片去水印在 <code>Canvas</code> 上重建像素：把框选区域当作损坏区域，
         自动在图里搜索最相似的区域并把真实画面搬回来，图片像素始终留在本机。</li>
+        <li>音频转换用浏览器的 <code>Web Audio API</code>（<code>AudioContext</code> +
+        <code>decodeAudioData</code>）在本地解码，WAV / FLAC 由页面自带的纯 JS 编码器写出，
+        OGG / MP3 借助浏览器内置的 <code>MediaRecorder</code> 重编码 —— 音频数据不会离开本机。</li>
         <li>本站没有后端、没有数据库、不发送任何分析事件。</li>
         <li>页面里不写 <code>localStorage</code> 或 <code>cookie</code>，刷新后一切归零。</li>
       </ul>
@@ -48,6 +51,14 @@
       主流浏览器均已原生支持。</p>
       <p>GIF 制作不依赖任何浏览器扩展能力 —— GIF89a 编码器是页面自带的纯 JS 实现，
       任何支持 <code>Canvas</code> 读取像素的浏览器都能用。</p>
+      <p>音频格式转换需要浏览器支持 <code>AudioContext</code> 与 <code>decodeAudioData</code>
+      （Chrome / Edge / Firefox / Safari 14+ 均支持）；输出 OGG / MP3 这类压缩格式时，
+      还需要浏览器内置 <code>MediaRecorder</code> 并支持相应的编码器 ——
+      若浏览器不支持，页面会提示改用 WAV 或 FLAC。</p>
+      <p>WAV 与 FLAC 由页面自带的纯 JS 编码器写出，不依赖浏览器编码器；
+      其中 FLAC 使用无压缩子帧，因此体积与 WAV 接近、但体积略小且可被主流播放器识别。
+      另需注意，个别浏览器的 <code>decodeAudioData</code> 不接受 FLAC 作为<em>输入</em>，
+      但 FLAC 作为<em>输出</em>不受影响。</p>
 
       <h2>快捷键</h2>
       <ul>
@@ -92,6 +103,8 @@ python -m http.server 8080</code></pre>
         <li><code>assets/js/regex.js</code> —— 正则测试台</li>
         <li><code>assets/js/watermark-core.js</code> —— 像素重建核心</li>
         <li><code>assets/js/watermark.js</code> —— 图片去水印</li>
+        <li><code>assets/js/audio-core.js</code> —— 音频解码与编码核心</li>
+        <li><code>assets/js/audio.js</code> —— 音频格式转换</li>
         <li><code>assets/js/palette.js</code> —— 命令面板</li>
       </ul>
     `;

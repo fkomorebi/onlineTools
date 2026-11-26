@@ -1,16 +1,17 @@
 {
   "name": "online-tools",
   "version": "1.0.0",
-  "description": "纯前端、零广告、无追踪的在线工具箱：JSON 格式化、图片压缩、图片格式转换、GIF 制作、时间格式化、文本差异对比、密码生成器、颜色工具",
+  "description": "纯前端、零广告、无追踪的在线工具箱：JSON 格式化、图片压缩、图片格式转换、GIF 制作、音频格式转换、时间格式化、文本差异对比、密码生成器、颜色工具",
   "private": true,
   "scripts": {
     "start": "npx --yes serve . -l 8080",
     "serve": "python -m http.server 8080",
-    "test": "node test/dom.test.js && node test/encode.test.js && node test/gif-encode.test.js && node test/gif-flow.test.js",
+    "test": "node test/dom.test.js && node test/encode.test.js && node test/gif-encode.test.js && node test/gif-flow.test.js && node test/audio.test.js",
     "test:dom": "node test/dom.test.js",
     "test:encode": "node test/encode.test.js",
     "test:gif": "node test/gif-encode.test.js && node test/gif-flow.test.js",
-    "test:browser": "node test/browser-image.js && node test/browser-convert.js && node test/browser-gif.js && node test/browser-watermark.js",
+    "test:audio": "node test/audio.test.js",
+    "test:browser": "node test/browser-image.js && node test/browser-convert.js && node test/browser-gif.js && node test/browser-watermark.js && node test/browser-audio.js",
     "test:actions": "powershell -NoProfile -ExecutionPolicy Bypass -File test/check-workflow.ps1",
     "shots": "node test/shot2.js"
   },
@@ -30,6 +31,10 @@
     "text-compare",
     "password-generator",
     "color-converter",
+    "audio-converter",
+    "mp3",
+    "wav",
+    "flac",
     "static-site",
     "github-pages"
   ],

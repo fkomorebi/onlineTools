@@ -9,6 +9,7 @@
   const CATEGORIES = [
     { id: 'text', name: '文本与数据', icon: '📝' },
     { id: 'image', name: '图片处理', icon: '🖼️' },
+    { id: 'media', name: '音视频', icon: '🎵' },
     { id: 'dev', name: '开发调试', icon: '🧑‍💻' },
     { id: 'design', name: '设计与安全', icon: '🎨' }
   ];
@@ -73,6 +74,11 @@
       icon: '🔗', route: '#/url', title: 'URL 解析', category: 'dev',
       desc: '拆解 URL 各部分、列出查询参数并解码，也能反向拼装链接。',
       keywords: 'url 解析 参数 query 链接 域名 反向 生成'
+    },
+    {
+      icon: '🎵', route: '#/audio', title: '音频格式转换', category: 'media',
+      desc: 'MP3 / WAV / OGG / FLAC 互转，可重采样、改单双声道，本地解码重编码。',
+      keywords: '音频 转换 mp3 wav ogg flac 格式 重采样 声道 采样率'
     },
     {
       icon: '🎨', route: '#/color', title: '颜色工具', category: 'design',
