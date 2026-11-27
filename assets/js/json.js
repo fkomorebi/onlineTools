@@ -572,5 +572,13 @@
     doFormat();
   }
 
-  global.JSONTool = { render: render, parse: parse, stringify: stringify };
+  global.JSONTool = {
+    render: render,
+    parse: parse,
+    stringify: stringify,
+    minify: minify,
+    stats: stats,
+    typeBreakdown: typeBreakdown,
+    getPath: getPath
+  };
 })(window);

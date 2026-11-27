@@ -6,11 +6,14 @@
   "scripts": {
     "start": "npx --yes serve . -l 8080",
     "serve": "python -m http.server 8080",
-    "test": "node test/dom.test.js && node test/encode.test.js && node test/gif-encode.test.js && node test/gif-flow.test.js && node test/audio.test.js",
+    "test": "node test/dom.test.js && node test/encode.test.js && node test/gif-encode.test.js && node test/gif-flow.test.js && node test/audio.test.js && node test/mcp.test.js",
     "test:dom": "node test/dom.test.js",
     "test:encode": "node test/encode.test.js",
     "test:gif": "node test/gif-encode.test.js && node test/gif-flow.test.js",
     "test:audio": "node test/audio.test.js",
+    "test:mcp": "node test/mcp.test.js",
+    "mcp": "node mcp/server.js",
+    "mcp:inspect": "node mcp/inspect.js",
     "test:browser": "node test/browser-image.js && node test/browser-convert.js && node test/browser-gif.js && node test/browser-watermark.js && node test/browser-audio.js && node test/browser-audio-ffmpeg.js",
     "test:actions": "powershell -NoProfile -ExecutionPolicy Bypass -File test/check-workflow.ps1",
     "shots": "node test/shot2.js"
@@ -51,5 +54,8 @@
   "devDependencies": {
     "jsdom": "^31.0.1",
     "sharp": "^0.35.5"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2"
   }
 }

@@ -291,6 +291,8 @@ npm test           # 全部测试
 | `npm run test:dom` | 465 项 DOM 集成测试 —— 在 jsdom 中加载真实页面并驱动真实代码 |
 | `npm run test:encode` | 18 项真实编解码测试 —— 用 sharp 生成/校验真实 PNG/WebP/JPEG 字节 |
 | `npm run test:gif` | 47 项 GIF 编码测试 —— 用 sharp（libgif）校验自研 GIF89a 编码器输出的真实字节 |
+| `npm run test:audio` | 55 项音频核心字节级测试 —— 自研 WAV / FLAC 编码器输出真实字节校验 |
+| `npm run test:mcp` | 41 项 MCP 协议测试 —— 真实 Client↔Server 握手后逐个调用 23 个工具 |
 | `npm run test:browser` | 54 项真实浏览器测试 —— 需要先启动无头 Edge（见下） |
 | `npm run test:actions` | 校验 workflow 用到的 GitHub Action 均不依赖 Node.js 20，并检查 build/deploy 是否拆成了两个 job |
 | `npm run shots` | 截图各页面到 `test/shots/` |
@@ -309,6 +311,53 @@ Start-Process "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" `
 $env:CDP_PORT = 9350
 npm run test:browser
 ```
+
+## 🤖 MCP 服务器（让 AI 直接调用）
+
+本站同时是一个 **MCP（Model Context Protocol）服务器** —— 23 个工具可以直接被 AI 调用，
+不用 AI 自己再写一遍 Base64 编码、CSV 解析、GIF 编码、时区换算。
+
+**核心逻辑零复制**：MCP 服务器直接加载网站自己的 `assets/js/*-core.js`，
+网站改了 AI 拿到的行为同步就变。
+
+```bash
+npm install
+npm run mcp        # 启动 stdio 服务器
+```
+
+客户端配置：
+
+```json
+{
+  "mcpServers": {
+    "online-tools": {
+      "command": "node",
+      "args": ["C:/你的路径/onlineTools/mcp/server.js"]
+    }
+  }
+}
+```
+
+| 工具 | 说明 |
+|------|------|
+| `json_format` / `json_query` | JSON 校验、格式化、统计、路径取值 |
+| `csv_to_json` / `json_to_csv` | CSV ⇄ JSON |
+| `encode` / `decode` / `detect_encoding` | Base64 / URL / Hex / HTML 实体 |
+| `url_parse` / `url_build` | URL 拆解与拼装 |
+| `datetime_convert` / `datetime_diff` | 时间格式化、时区换算、时间差 |
+| `diff_text` | 文本差异对比 + Unified Diff |
+| `regex_test` / `regex_explain` | 正则匹配与表达式拆解 |
+| `color_convert` / `color_contrast` / `color_palette` | 颜色互转、WCAG 对比度、配色方案 |
+| `password_generate` / `password_check` | 密码生成与弱口令检测 |
+| `image_convert` / `image_compress` / `image_gif` / `image_watermark` | 图片转换、压缩、GIF 合成、去水印 |
+
+不接客户端也能直接试：
+
+```bash
+npm run mcp:inspect -- color_convert '{"color":"#ff8800"}'
+```
+
+📖 详见 [`mcp/README.md`](mcp/README.md)。
 
 ## 📁 项目结构
 
@@ -356,12 +405,21 @@ npm run test:browser
 │       └── app.js                哈希路由与启动
 ├── vendor/
 │   └── ffmpeg/                  ffmpeg.wasm 单线程内核（ffmpeg-core.wasm 约 31 MB，按需下载）
+├── mcp/                         MCP 服务器（让 AI 直接调用本站工具）
+│   ├── server.js                MCP 服务器入口（stdio 传输 + 工具调度）
+│   ├── core-loader.js           把浏览器的 *-core.js 加载进 Node（零复制核心逻辑）
+│   ├── tools-registry.js        23 个工具的声明式定义（名称 / 说明 / JSON Schema）
+│   ├── tools-text.js            文本与数据类工具实现
+│   ├── tools-image.js           图片类工具实现（sharp + GifCore）
+│   ├── inspect.js               命令行速查 / 调试台
+│   └── README.md                MCP 接入说明
 └── test/
     ├── dom.test.js               DOM 集成测试（jsdom）
     ├── encode.test.js            真实编解码测试（sharp）
     ├── gif-encode.test.js        GIF 编码字节测试（sharp 校验 GIF89a 输出）
     ├── gif-flow.test.js          GIF 页面端到端流程测试（jsdom + sharp）
     ├── audio.test.js             音频核心字节级测试（WAV / FLAC / 能力判定）
+    ├── mcp.test.js               MCP 协议级测试（真实 Client↔Server 握手 + 逐工具调用）
     ├── browser-audio.js          浏览器音频转换验证（WAV / FLAC / WebM）
     ├── browser-audio-ffmpeg.js   浏览器 ffmpeg 引擎验证（MP3 / AAC / OGG）
     ├── browser-image.js          浏览器图片压缩验证
