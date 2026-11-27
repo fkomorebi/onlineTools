@@ -8,14 +8,30 @@
 
   const { el, formatBytes, downloadBlob, readFileAsArrayBuffer } = global.U;
   const Core = global.AudioCore;
+  const FF = global.AudioFFmpeg;
 
+  // 引擎状态变化时统一刷新界面（徽标 + 格式提示）
+  if (FF && typeof FF.onStateChange === 'function') {
+    FF.onStateChange(function () {
+      if (document.getElementById('au-ffmpeg-state')) onFFmpegReady();
+    });
+  }
+
+  /**
+   * 输出格式表。
+   *  native   —— 页面自带的纯 JS 编码器（WAV / FLAC），任何浏览器都能用
+   *  recorder —— 浏览器内置 MediaRecorder 编码器
+   *  ffmpeg   —— ffmpeg.wasm 编码（需用户手动加载引擎）
+   */
   const FORMAT_OPTIONS = [
-    { mime: 'audio/wav', label: 'WAV（未压缩，体积大）' },
-    { mime: 'audio/flac', label: 'FLAC（无损压缩）' },
-    { mime: 'audio/ogg', label: 'OGG（Opus，有损）' },
-    { mime: 'audio/mpeg', label: 'MP3（有损）' },
-    { mime: 'audio/webm', label: 'WebM 音频（Opus，有损）' }
+    { mime: 'audio/wav', label: 'WAV（未压缩，体积大）', via: 'native' },
+    { mime: 'audio/flac', label: 'FLAC（无损压缩）', via: 'native' },
+    { mime: 'audio/mpeg', label: 'MP3（有损，需 ffmpeg）', via: 'ffmpeg' },
+    { mime: 'audio/aac', label: 'AAC / M4A（有损，需 ffmpeg）', via: 'ffmpeg' },
+    { mime: 'audio/ogg', label: 'OGG（Opus，有损）', via: 'recorder' },
+    { mime: 'audio/webm', label: 'WebM 音频（Opus，有损）', via: 'recorder' }
   ];
+
 
   const RATE_OPTIONS = [
     { value: 0, label: '保持原样' },
@@ -103,14 +119,10 @@
     const fFormat = el('div', { class: 'field' });
     fFormat.appendChild(el('label', { class: 'field-label', for: 'au-format', text: '输出格式' }));
     const selFormat = el('select', { id: 'au-format', onchange: refreshFormatHint });
-    // 按浏览器能力标注：可用的正常显示，不可用的加「（当前浏览器不支持）」后缀
     FORMAT_OPTIONS.forEach(function (o) {
-      const available = Core.LOSSLESS_FORMATS[o.mime] || Core.supportsFormat(o.mime);
-      const label = available ? o.label : o.label + '（当前浏览器不支持）';
       selFormat.appendChild(el('option', {
         value: o.mime,
-        text: label,
-        disabled: available ? null : 'disabled'
+        text: o.label
       }));
     });
     fFormat.appendChild(selFormat);
@@ -120,11 +132,12 @@
     // 默认选中「当前浏览器真正可用」的格式：
     // 优先选可用的压缩格式（体积小），没有则退回 WAV
     const preferred = FORMAT_OPTIONS.find(function (o) {
-      return !Core.LOSSLESS_FORMATS[o.mime] && Core.supportsFormat(o.mime);
+      return o.via === 'recorder' && Core.supportsFormat(o.mime);
     });
-    const fallback = FORMAT_OPTIONS.find(function (o) { return Core.LOSSLESS_FORMATS[o.mime]; });
+    const fallback = FORMAT_OPTIONS.find(function (o) { return o.via === 'native'; });
     const defaultOpt = preferred || fallback || FORMAT_OPTIONS[0];
     selFormat.value = defaultOpt.mime;
+
 
     const fRate = el('div', { class: 'field' });
     fRate.appendChild(el('label', { class: 'field-label', for: 'au-rate', text: '采样率' }));
@@ -149,7 +162,30 @@
     card.appendChild(grid);
     root.appendChild(card);
 
+    // ---------- ffmpeg 引擎卡片 ----------
+    const ffCard = el('div', { class: 'card', id: 'au-ffmpeg-card' });
+    ffCard.appendChild(el('div', { class: 'card-title', text: '高级编码引擎（ffmpeg）' }));
+    const ffBody = el('div', { class: 'prose' });
+    ffBody.appendChild(el('p', {
+      text: 'MP3 / AAC / OGG（Vorbis）这类格式浏览器原生拿不到，需要内置的 ffmpeg 引擎来编码。' +
+        '引擎约 31 MB，按需下载一次后会缓存在浏览器里，全程离线可用。'
+    }));
+    const ffRow = el('div', { class: 'toolbar' });
+    const btnFF = el('button', {
+      class: 'btn btn-primary',
+      id: 'au-ffmpeg-btn',
+      text: '下载并启用 ffmpeg 引擎',
+      onclick: loadFFmpeg
+    });
+    ffRow.appendChild(btnFF);
+    ffRow.appendChild(el('span', { class: 'spacer' }));
+    ffRow.appendChild(el('span', { class: 'hint', id: 'au-ffmpeg-state', text: '未启用' }));
+    ffBody.appendChild(ffRow);
+    ffCard.appendChild(ffBody);
+    root.appendChild(ffCard);
+
     // ---------- 工具栏 ----------
+
     const toolbar = el('div', { class: 'toolbar' });
     toolbar.appendChild(el('button', {
       class: 'btn btn-primary',
@@ -182,6 +218,9 @@
     root.appendChild(listCard);
 
     refreshFormatHint();
+    refreshFFmpegState();
+    // 引擎可能是上一轮交互里已经加载好的，同步一下提示文案
+    syncFFmpegStateOnRender();
 
     // ---------- 事件 ----------
     dz.addEventListener('click', function () { fileInput.click(); });
@@ -209,16 +248,97 @@
     const hint = document.getElementById('au-format-hint');
     if (!hint) return;
     const mime = state().format;
-    const fmt = Core.OUTPUT_FORMATS[mime];
-    if (!fmt) { hint.textContent = ''; return; }
-    if (Core.LOSSLESS_FORMATS[mime]) {
-      hint.textContent = '无损编码，转换后音质与原文件一致（FLAC 由本工具内置编码器生成，无需浏览器支持）。';
-    } else if (!Core.supportsFormat(fmt.mime)) {
-      hint.textContent = '⚠ 当前浏览器不支持输出 ' + fmt.label + '（缺少 ' + fmt.mime + ' 编码器），请改用其他格式。';
+    const opt = FORMAT_OPTIONS.find(function (o) { return o.mime === mime; });
+    if (!opt) { hint.textContent = ''; return; }
+
+    // 以「实际能力」为准，而不是格式的默认来源：
+    // 比如 OGG 在 Chrome 里浏览器没编码器，但 ffmpeg 能出 Vorbis。
+    const cap = Core.formatCapability(mime);
+
+    if (opt.via === 'native') {
+      hint.textContent = '无损/未压缩，由本工具内置的纯 JS 编码器写出，无需任何浏览器能力。';
+      return;
+    }
+    if (cap.via === 'recorder') {
+      hint.textContent = '有损编码，由浏览器内置的 MediaRecorder 完成，体积更小。';
+      return;
+    }
+    if (cap.via === 'ffmpeg') {
+      if (FF && FF.isReady()) {
+        hint.textContent = '有损编码，由内置 ffmpeg 引擎完成（已启用）。';
+      } else {
+        hint.textContent = '需要启用下方的 ffmpeg 引擎才能输出该格式（浏览器原生不支持）。';
+      }
+      return;
+    }
+    // 完全不可用
+    const fmt = Core.COMPRESSED_FORMATS[mime];
+    hint.textContent = '⚠ 当前浏览器不支持输出 ' + (fmt ? fmt.label : opt.label) +
+      '，可改用其他格式，或启用下方 ffmpeg 引擎。';
+  }
+
+  /** 更新 ffmpeg 状态提示 */
+  function refreshFFmpegState() {
+    const stateEl = document.getElementById('au-ffmpeg-state');
+    const btn = document.getElementById('au-ffmpeg-btn');
+    if (!stateEl) return;
+    if (!FF) {
+      stateEl.textContent = 'ffmpeg 模块未加载';
+      if (btn) { btn.setAttribute('disabled', 'disabled'); btn.textContent = 'ffmpeg 不可用'; }
+      return;
+    }
+    const st = FF.getState();
+    if (st === 'ready') {
+      stateEl.textContent = '已启用 ✓';
+      if (btn) { btn.setAttribute('disabled', 'disabled'); btn.textContent = 'ffmpeg 已就绪'; }
+    } else if (st === 'loading') {
+      stateEl.textContent = '加载中…';
+      if (btn) { btn.setAttribute('disabled', 'disabled'); btn.textContent = '正在加载…'; }
+    } else if (st === 'failed') {
+      stateEl.textContent = '加载失败：' + FF.getError();
+      if (btn) { btn.removeAttribute('disabled'); btn.textContent = '重试下载 ffmpeg 引擎'; }
     } else {
-      hint.textContent = '有损编码，体积更小；质量由浏览器内置编码器决定。';
+      stateEl.textContent = '未启用';
+      if (btn) { btn.removeAttribute('disabled'); btn.textContent = '下载并启用 ffmpeg 引擎'; }
     }
   }
+
+  /**
+   * 渲染时同步一次 ffmpeg 状态。
+   * 引擎可能已经被上一轮交互加载好了（AudioFFmpeg 是全局单例，
+   * 页面重渲染不会把它卸载），所以这里直接读当前状态，
+   * 而不是让用户以为还得再点一次按钮。
+   */
+  function syncFFmpegStateOnRender() {
+    refreshFFmpegState();
+    if (FF && FF.getState() === 'ready') {
+      refreshFormatHint();
+    }
+  }
+
+  /** ffmpeg 引擎就绪后要刷新的界面（状态徽标 + 格式提示） */
+  function onFFmpegReady() {
+    refreshFFmpegState();
+    refreshFormatHint();
+  }
+
+  /** 加载 ffmpeg 引擎 */
+  function loadFFmpeg() {
+    if (!FF) {
+      setStatus('✗ ffmpeg 模块未加载', 'err');
+      return;
+    }
+    refreshFFmpegState();
+    setStatus('正在下载 ffmpeg 引擎（约 31 MB，仅首次）…', 'info');
+    FF.load().then(function () {
+      onFFmpegReady();
+      setStatus('✓ ffmpeg 引擎已就绪，现在可以输出 MP3 / AAC / OGG', 'ok');
+    }).catch(function (err) {
+      refreshFFmpegState();
+      setStatus('✗ ' + (err && err.message ? err.message : String(err)), 'err');
+    });
+  }
+
 
   function isAudioFile(file) {
     if (!file) return false;
@@ -342,16 +462,29 @@
       setStatus('✗ 请先添加音频文件', 'err');
       return;
     }
-    if (!Core.hasAudioContext()) {
-      setStatus('✗ 当前浏览器不支持 Web Audio API，无法解码音频', 'err');
-      return;
-    }
     const opts = state();
-    if (!Core.supportsFormat(opts.format) && !Core.LOSSLESS_FORMATS[opts.format]) {
-      const fmt = Core.OUTPUT_FORMATS[opts.format];
-      setStatus('✗ 当前浏览器不支持输出 ' + (fmt ? fmt.label : opts.format) + '，请改用 WAV 或 FLAC', 'err');
+    const cap = Core.formatCapability(opts.format);
+
+    // 该格式当前能不能用
+    if (!cap.ok) {
+      if (cap.via === 'ffmpeg') {
+        setStatus('✗ ' + (cap.reason || 'ffmpeg 引擎不可用') + '，请先启用下方的 ffmpeg 引擎', 'err');
+      } else {
+        const fmt = Core.OUTPUT_FORMATS[opts.format];
+        setStatus('✗ 当前浏览器不支持输出 ' + (fmt ? fmt.label : opts.format) + '，请改用 WAV 或 FLAC', 'err');
+      }
       return;
     }
+
+    // ffmpeg 专用格式：先确保引擎就绪
+    const needFFmpeg = cap.via === 'ffmpeg';
+    const ensureFFmpeg = needFFmpeg
+      ? (FF && FF.isReady()
+        ? Promise.resolve()
+        : FF.load().then(function () {
+          onFFmpegReady();
+        }))
+      : Promise.resolve();
 
     const btn = document.querySelector('.toolbar .btn-primary');
     if (btn) btn.setAttribute('disabled', 'disabled');
@@ -359,35 +492,38 @@
     items.forEach(function (it) { it.outBlob = null; it.error = ''; it.info = null; });
     renderList();
 
-    let done = 0;
-    const chain = items.reduce(function (p, it) {
-      return p.then(function () {
-        setStatus('正在转换 ' + (done + 1) + ' / ' + items.length + '：' + it.name, 'info');
-        return readFileAsArrayBuffer(it.file)
-          .then(function (buf) {
-            return Core.convert(buf, opts).then(function (result) {
-              it.info = {
-                duration: result.duration,
-                sampleRate: result.sampleRate,
-                channels: result.channels
-              };
-              const fmt = Core.OUTPUT_FORMATS[opts.format];
-              it.outBlob = result.blob;
-              it.outName = Core.buildFilename(it.name, fmt.ext);
-              it.outSize = result.blob.size;
+    ensureFFmpeg.then(function () {
+      let done = 0;
+      const chain = items.reduce(function (p, it) {
+        return p.then(function () {
+          setStatus('正在转换 ' + (done + 1) + ' / ' + items.length + '：' + it.name, 'info');
+          return readFileAsArrayBuffer(it.file)
+            .then(function (buf) {
+              return Core.convert(buf, opts).then(function (result) {
+                it.info = {
+                  duration: result.duration,
+                  sampleRate: result.sampleRate,
+                  channels: result.channels
+                };
+                const fmt = Core.OUTPUT_FORMATS[opts.format] ||
+                  Core.FFMPEG_ONLY_FORMATS[opts.format];
+                it.outBlob = result.blob;
+                it.outName = Core.buildFilename(it.name, fmt.ext);
+                it.outSize = result.blob.size;
+                done++;
+                renderList();
+              });
+            })
+            .catch(function (err) {
+              it.error = err && err.message ? err.message : String(err);
               done++;
               renderList();
             });
-          })
-          .catch(function (err) {
-            it.error = err && err.message ? err.message : String(err);
-            done++;
-            renderList();
-          });
-      });
-    }, Promise.resolve());
+        });
+      }, Promise.resolve());
 
-    chain.then(function () {
+      return chain;
+    }).then(function () {
       if (btn) btn.removeAttribute('disabled');
       const okCount = items.filter(function (x) { return x.outBlob; }).length;
       const failCount = items.length - okCount;
@@ -398,8 +534,13 @@
       } else {
         setStatus('✗ 全部转换失败，请检查文件是否有效', 'err');
       }
+    }).catch(function (err) {
+      if (btn) btn.removeAttribute('disabled');
+      refreshFFmpegState();
+      setStatus('✗ ' + (err && err.message ? err.message : String(err)), 'err');
     });
   }
+
 
   function downloadAll() {
     const ready = items.filter(function (it) { return it.outBlob; });

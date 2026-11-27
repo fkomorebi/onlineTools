@@ -117,8 +117,25 @@ function runSnippet(evaluate, body) {
   await S('Page.navigate', { url: SITE + '/?t=' + Date.now() + '#/audio' });
   await sleep(1800);
   check('音频页加载', await evaluate(`!!document.querySelector('#au-format')`));
-  check('输出格式下拉含 5 项', await evaluate(`document.querySelector('#au-format').options.length === 5`),
+  check('输出格式下拉含 6 项', await evaluate(`document.querySelector('#au-format').options.length === 6`),
     await evaluate(`[...document.querySelector('#au-format').options].map(o=>o.value).join(',')`));
+
+  // --- 用户手势 ---
+  // 浏览器创建的 AudioContext 默认是 suspended，渲染线程不推进时
+  // MediaRecorder 只能录到空流（实测仅 110 字节 EBML 头，没有音频帧）。
+  // 页面里点一下「开始转换」本身就是一个用户手势，但脚本直接调 AudioCore.convert()
+  // 时没有手势，所以这里先合成一次真实点击把浏览器「解锁」。
+  await evaluate(`(() => {
+    const b = document.createElement('button');
+    b.id = 'cdp-gesture-btn';
+    b.textContent = 'x';
+    b.style.cssText = 'position:fixed;left:8px;top:8px;z-index:99999;width:80px;height:36px';
+    document.body.appendChild(b);
+    return true;
+  })()`);
+  await S('Input.dispatchMouseEvent', { type: 'mousePressed', x: 40, y: 24, button: 'left', clickCount: 1 });
+  await S('Input.dispatchMouseEvent', { type: 'mouseReleased', x: 40, y: 24, button: 'left', clickCount: 1 });
+  await sleep(200);
 
   // 选择文件
   const doc = await S('DOM.getDocument');
@@ -232,6 +249,8 @@ function runSnippet(evaluate, body) {
   check('重采样后体积显著变小', rsOut.size < 50000, String(rsOut.size));
 
   // --- 压缩格式（OGG / MP3 / WebM）：浏览器支持就必须成功，不支持必须给出明确提示 ---
+  // 注意：MP3 / OGG 现在也可能走 ffmpeg 后端（浏览器没编码器时自动降级），
+  // 所以判断依据是「最终走哪条编码路径」，而不是只看 MediaRecorder。
   for (const [label, mime, supported] of [
     ['OGG', 'audio/ogg', fmtSupport.ogg],
     ['MP3', 'audio/mpeg', fmtSupport.mp3],
@@ -247,8 +266,13 @@ function runSnippet(evaluate, body) {
         decoded = { dur: d.duration, rate: d.sampleRate, ch: d.numberOfChannels };
         ctx.close();
       } catch (e) { err = e.message || String(e); }
-      return { ok: true, type: res.blob.type, size: res.blob.size, decoded, err };
+      return { ok: true, type: res.blob.type, size: res.blob.size, via: res.via, decoded, err };
     `);
+    // 走 ffmpeg 后端时，解码校验统一放到 ffmpeg 专用测试里
+    if (r.via === 'ffmpeg') {
+      check(label + ' 交由 ffmpeg 编码', r.ok === true && r.size > 0, `${r.via} ${r.size}`);
+      continue;
+    }
     if (supported) {
       check(label + ' 输出成功', r.ok === true, r.err || `${r.type} ${r.size}`);
       check(label + ' 输出非空', r.size > 0, String(r.size));

@@ -44,7 +44,7 @@
 | 🔣 [编码转换](index.html#/encode) | Base64 / Base64 URL-safe / URL 百分号 / 十六进制 / HTML 实体互转，输入自动识别编码类型 |
 | 🎯 [正则测试台](index.html#/regex) | 实时匹配高亮，捕获组列表，10 个常用模板，表达式逐段拆解，生成示例文本 |
 | 🧽 [图片去水印](index.html#/watermark) | 框选水印区域后自动补片重建（多分辨率 patch match），可自动检测候选区域 |
-| 🎵 [音频格式转换](index.html#/audio) | MP3 / WAV / OGG / FLAC 互转，可重采样、改单双声道，WAV / FLAC 由自研编码器写出 |
+| 🎵 [音频格式转换](index.html#/audio) | MP3 / WAV / OGG / FLAC / AAC 互转，可重采样、改单双声道；WAV / FLAC 由自研编码器写出，MP3 / AAC 由按需加载的 ffmpeg.wasm 引擎完成 |
 
 ### JSON 格式化
 
@@ -191,17 +191,26 @@
 
 把 MP3 / WAV / OGG / FLAC 等音频互相转换，顺带调整采样率与声道数。
 
-- **输出格式**：WAV、FLAC、OGG（Opus）、MP3、WebM 音频
+- **输出格式**：WAV、FLAC、MP3、AAC / M4A、OGG、WebM 音频
 - **重采样**：8 kHz ~ 48 kHz 任选（保持原样亦可），降采样能明显减小体积
 - **声道处理**：保持原样 / 转单声道 / 转立体声，多声道输入会先下混为双声道
 - **自研编码器**：WAV（16-bit PCM）与 FLAC（无压缩子集）由页面自带的纯 JS 编码器直接写出，不依赖浏览器
-- **压缩格式**：OGG / MP3 / WebM 借助浏览器内置 `MediaRecorder` 重编码；若浏览器不支持该编码器，页面会提示改用 WAV 或 FLAC
+- **压缩格式**：OGG / WebM 借助浏览器内置 `MediaRecorder` 重编码；MP3 / AAC 则由内置的 `ffmpeg.wasm` 引擎完成
+- **按需加载引擎**：`ffmpeg.wasm` 核心约 31 MB（gzip 后约 10 MB），只有当你要输出 MP3 / AAC 时才点按钮下载，不影响其他功能的首屏速度
 - **批量处理**：可一次拖入多个文件，逐个显示时长、采样率、声道与体积变化（↓ / ↑ 百分比）
 
 > 解码用浏览器内置的 `Web Audio API`（`decodeAudioData`），音频数据不会离开本机。
+> `ffmpeg.wasm` 同样完全在浏览器里跑，音频既不上传也不经过任何服务器。
 >
 > 提示：部分浏览器的 `decodeAudioData` 不接受 FLAC 输入，但 FLAC 输出文件本身是标准格式，可直接用播放器打开。
 > 「保持原样」采样率时，浏览器会按自身默认采样率（Chrome 为 48 kHz）重采样后输出。
+>
+> 关于 Opus：当前随附的 `ffmpeg.wasm` 单线程内核在调用 `libopus` 编码器时会触发 wasm 内存越界，
+> 因此暂不提供 Opus 输出。OGG（Vorbis）与 WebM（Opus）已可满足大部分场景。
+
+> 提示：浏览器的 `MediaRecorder` 只在音频上下文处于「运行中」时才会真正产出数据。
+> 如果你直接调用转换接口而没有先点击页面，录音可能得到空音频 —— 页面上的「开始转换」按钮
+> 本身就是一次用户手势，会自动解锁，无需额外操作。
 
 ### ⌨️ 命令面板
 
@@ -340,15 +349,21 @@ npm run test:browser
 │       ├── regex.js              正则测试台
 │       ├── watermark-core.js     去水印核心（自动补片 / 边界扩散 / 模糊 / 中位数 / 手动补片 / 水印检测）
 │       ├── watermark.js          图片去水印工具
-│       ├── audio-core.js         音频转换核心（解码 / 重采样 / WAV / FLAC 编码）
+│       ├── audio-core.js         音频转换核心（解码 / 重采样 / WAV / FLAC 编码 / 能力判定）
+│       ├── audio-ffmpeg.js       ffmpeg.wasm 封装（按需加载内核 / MP3 / AAC 编码）
 │       ├── audio.js              音频格式转换工具
 │       ├── palette.js            Ctrl+K 命令面板
 │       └── app.js                哈希路由与启动
+├── vendor/
+│   └── ffmpeg/                  ffmpeg.wasm 单线程内核（ffmpeg-core.wasm 约 31 MB，按需下载）
 └── test/
     ├── dom.test.js               DOM 集成测试（jsdom）
     ├── encode.test.js            真实编解码测试（sharp）
     ├── gif-encode.test.js        GIF 编码字节测试（sharp 校验 GIF89a 输出）
     ├── gif-flow.test.js          GIF 页面端到端流程测试（jsdom + sharp）
+    ├── audio.test.js             音频核心字节级测试（WAV / FLAC / 能力判定）
+    ├── browser-audio.js          浏览器音频转换验证（WAV / FLAC / WebM）
+    ├── browser-audio-ffmpeg.js   浏览器 ffmpeg 引擎验证（MP3 / AAC / OGG）
     ├── browser-image.js          浏览器图片压缩验证
     ├── browser-convert.js        浏览器格式转换验证
     ├── browser-gif.js            浏览器 GIF 制作验证
@@ -367,7 +382,7 @@ npm run test:browser
 - 文本差异对比在浏览器内计算 LCS，密码由 `crypto.getRandomValues` 本地生成，颜色转换为纯计算 —— 都不上传任何数据。
 - URL 解析、CSV ⇄ JSON、编码转换、正则测试台全部是纯字符串处理，数据不出浏览器。
 - 去水印的图片由 `FileReader` 读入 `Canvas`，像素运算在本地完成，导出后才产生文件。
-- 音频由浏览器的 Web Audio API 在本地解码，WAV / FLAC 由自研编码器写出，压缩格式借助 `MediaRecorder` 重编码 —— 音频不上传。
+- 音频由浏览器的 Web Audio API 在本地解码，WAV / FLAC 由自研编码器写出，OGG / WebM 借助 `MediaRecorder` 重编码，MP3 / AAC 由浏览器内的 `ffmpeg.wasm` 引擎编码 —— 音频不上传。
 - 无后端、无数据库、无分析事件、不写 `cookie` 或 `localStorage`。
 - 唯一的网络请求是加载页面本身的静态文件。
 

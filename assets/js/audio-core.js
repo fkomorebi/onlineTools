@@ -32,8 +32,17 @@
     'audio/webm': { ext: 'webm', label: 'WebM 音频', mime: 'audio/webm;codecs=opus' }
   };
 
-  /** 全部可选输出格式 */
-  const OUTPUT_FORMATS = Object.assign({}, LOSSLESS_FORMATS, COMPRESSED_FORMATS);
+  /**
+   * 仅 ffmpeg 能编码的格式（浏览器原生拿不到）。
+   * 键是输出 MIME，值是 ffmpeg 侧的配置，详见 assets/js/audio-ffmpeg.js。
+   */
+  const FFMPEG_ONLY_FORMATS = {
+    'audio/mpeg': { ext: 'mp3', label: 'MP3', via: 'ffmpeg' },
+    'audio/aac': { ext: 'm4a', label: 'AAC（M4A）', via: 'ffmpeg' }
+  };
+
+  /** 全部可选输出格式（原生 + ffmpeg 专用） */
+  const OUTPUT_FORMATS = Object.assign({}, LOSSLESS_FORMATS, COMPRESSED_FORMATS, FFMPEG_ONLY_FORMATS);
 
   /** 音频 MIME → 文件扩展名（读取时用于推断） */
   const EXT_BY_TYPE = {
@@ -104,6 +113,25 @@
     const Ctor = global.AudioContext || global.webkitAudioContext;
     if (!Ctor) throw new Error('当前浏览器不支持 Web Audio API');
     return new Ctor();
+  }
+
+  /**
+   * 确保 AudioContext 处于 running 状态。
+   *
+   * 浏览器默认会创建「suspended」的 AudioContext，必须有用户手势才能恢复运行。
+   * 而 MediaRecorder 只从「正在渲染」的音频流里取数据 —— 上下文一旦 suspended，
+   * 渲染线程就不会推进，MediaRecorder 只能录到一个空流（实测只输出 110 字节的
+   * EBML 头，没有任何音频帧）。所以编码前一定要把上下文唤醒。
+   *
+   * @param {AudioContext} ctx
+   * @returns {Promise<void>}
+   */
+  function ensureContextRunning(ctx) {
+    if (!ctx || ctx.state === 'running') return Promise.resolve();
+    if (typeof ctx.resume !== 'function') return Promise.resolve();
+    return ctx.resume().catch(function () {
+      // 没有用户手势时 resume 会被拒绝 —— 交给上层按「录制失败」处理
+    });
   }
 
   /**
@@ -494,6 +522,47 @@
     }
   }
 
+  /* ---------------- ffmpeg 后端 ---------------- */
+
+  /** ffmpeg 封装是否可用（脚本已加载） */
+  function hasFFmpeg() {
+    return !!(global.AudioFFmpeg && typeof global.AudioFFmpeg.encode === 'function');
+  }
+
+  /**
+   * 某种输出格式当前能不能用。
+   * @param {string} mime 输出 MIME
+   * @returns {{ok:boolean, via:string, reason:string}}
+   *   via: 'native'（自研编码器）| 'recorder'（MediaRecorder）| 'ffmpeg'
+   */
+  function formatCapability(mime) {
+    if (LOSSLESS_FORMATS[mime]) {
+      return { ok: true, via: 'native', reason: '' };
+    }
+    if (FFMPEG_ONLY_FORMATS[mime]) {
+      if (!hasFFmpeg()) {
+        return { ok: false, via: 'ffmpeg', reason: 'ffmpeg 模块未加载' };
+      }
+      if (!global.AudioFFmpeg.FFMPEG_FORMATS[mime]) {
+        return { ok: false, via: 'ffmpeg', reason: 'ffmpeg 不支持该格式' };
+      }
+      return { ok: true, via: 'ffmpeg', reason: '' };
+    }
+    const fmt = COMPRESSED_FORMATS[mime];
+    if (!fmt) {
+      return { ok: false, via: '', reason: '不支持的输出格式' };
+    }
+    if (supportsFormat(fmt.mime)) {
+      return { ok: true, via: 'recorder', reason: '' };
+    }
+    // 浏览器没有对应编码器，但 ffmpeg 或许能行
+    if (hasFFmpeg() && global.AudioFFmpeg.FFMPEG_FORMATS[mime]) {
+      return { ok: true, via: 'ffmpeg', reason: '' };
+    }
+    return { ok: false, via: 'recorder', reason: '当前浏览器不支持输出 ' + fmt.label };
+  }
+
+
   /**
    * 用 AudioContext + MediaRecorder 录制 AudioBuffer 为压缩格式
    * @param {{channels:Float32Array[], sampleRate:number, length:number}} audio 采样数据
@@ -532,15 +601,27 @@
           try { if (ctx && ctx.state !== 'closed' && typeof ctx.close === 'function') ctx.close(); } catch (e) { /* ignore */ }
           try { if (stream && stream.getTracks) stream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) { /* ignore */ }
         }
-        source.start(0);
-        recorder.start();
-        // 按音频时长停止
-        var stopTimer = setTimeout(function () {
-          try { if (recorder && recorder.state !== 'inactive') recorder.stop(); } catch (e) { /* ignore */ }
-        }, Math.max(200, (audio.length / audio.sampleRate || 0) * 1000 + 120));
+
+        // 关键：AudioContext 默认是 suspended，渲染线程不推进时
+        // MediaRecorder 只会录到空流（实测仅 110 字节 EBML 头）。
+        // 必须等上下文真正 running 之后才开始录。
+        ensureContextRunning(ctx).then(function () {
+          if (ctx && ctx.state !== 'running') {
+            cleanup();
+            reject(new Error('录制失败：浏览器未允许音频输出（需要一次用户交互）'));
+            return;
+          }
+          source.start(0);
+          recorder.start();
+          // 按音频时长停止
+          stopTimer = setTimeout(function () {
+            try { if (recorder && recorder.state !== 'inactive') recorder.stop(); } catch (e) { /* ignore */ }
+          }, Math.max(200, (audio.length / audio.sampleRate || 0) * 1000 + 120));
+        });
+        var stopTimer = null;
         var origStop = recorder.stop.bind(recorder);
         recorder.stop = function () {
-          clearTimeout(stopTimer);
+          if (stopTimer) clearTimeout(stopTimer);
           origStop();
         };
       } catch (e) {
@@ -555,17 +636,40 @@
    * 把音频文件转换成指定格式
    * @param {ArrayBuffer} buffer 原始音频数据
    * @param {object} opts
-   *   - format: 输出 MIME（audio/wav | audio/flac | audio/ogg | audio/mpeg | audio/webm）
+   *   - format: 输出 MIME（audio/wav | audio/flac | audio/ogg | audio/mpeg | audio/webm
+   *              | audio/aac | audio/opus）
    *   - sampleRate: 目标采样率（0 表示保持原样）
    *   - channels: 目标声道数（0 表示保持原样；1 表示转单声道）
-   *   - bitDepth: 采样位深（仅 WAV 可选 8/16/24/32，核心实现 16-bit）
-   * @returns {Promise<{blob:Blob, format:string, duration:number, sampleRate:number, channels:number}>}
+   *   - preferFFmpeg: true 表示优先走 ffmpeg 编码（即使浏览器原生支持）
+   * @returns {Promise<{blob:Blob, format:string, duration:number, sampleRate:number, channels:number, via:string}>}
    */
   function convert(buffer, opts) {
     opts = opts || {};
     const format = opts.format || 'audio/wav';
     const targetRate = opts.sampleRate || 0;
     const targetCh = opts.channels || 0;
+
+    // ---- ffmpeg 路径：直接用原始字节交给 ffmpeg，不经过 Web Audio 解码 ----
+    // ffmpeg 自己就能重采样 / 改声道，而且能吃 Web Audio 解不了的格式
+    // （例如部分浏览器 decodeAudioData 不接受 FLAC）。
+    const cap = formatCapability(format);
+    const ffmpegPreferred = hasFFmpeg() && cap.via === 'ffmpeg' &&
+      (opts.preferFFmpeg || !LOSSLESS_FORMATS[format]);
+
+    if (ffmpegPreferred) {
+      const ffOpts = { format: format, sampleRate: targetRate, channels: targetCh };
+      return global.AudioFFmpeg.encode(toUint8(buffer), ffOpts)
+        .then(function (out) {
+          return {
+            blob: out.blob,
+            format: format,
+            duration: out.duration || 0,
+            sampleRate: out.sampleRate || targetRate,
+            channels: out.channels || targetCh,
+            via: 'ffmpeg'
+          };
+        });
+    }
 
     // 先按目标采样率解码，这样输出采样率就是目标值（而不是硬件默认值）
     return decode(buffer, targetRate).then(function (audioBuffer) {
@@ -584,7 +688,8 @@
         format: format,
         duration: audioBuffer.duration,
         sampleRate: audio.sampleRate,
-        channels: chans.length
+        channels: chans.length,
+        via: 'native'
       };
 
       if (format === 'audio/wav') {
@@ -604,10 +709,22 @@
       }
       return encodeWithRecorder(audio, fmt.mime).then(function (blob) {
         meta.blob = blob;
+        meta.via = 'recorder';
         return meta;
       });
     });
   }
+
+  /** ArrayBuffer / TypedArray → Uint8Array */
+  function toUint8(buf) {
+    if (buf instanceof Uint8Array) return buf;
+    if (buf instanceof ArrayBuffer) return new Uint8Array(buf);
+    if (buf && buf.buffer instanceof ArrayBuffer) {
+      return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
+    }
+    return new Uint8Array(0);
+  }
+
 
   /** 用处理后的采样数据构造一个新的 AudioBuffer */
   function buildAudioBuffer(ctx, audio) {
@@ -632,6 +749,7 @@
     OUTPUT_FORMATS: OUTPUT_FORMATS,
     LOSSLESS_FORMATS: LOSSLESS_FORMATS,
     COMPRESSED_FORMATS: COMPRESSED_FORMATS,
+    FFMPEG_ONLY_FORMATS: FFMPEG_ONLY_FORMATS,
     SAMPLE_RATES: SAMPLE_RATES,
     CHANNEL_COUNTS: CHANNEL_COUNTS,
     EXT_BY_TYPE: EXT_BY_TYPE,
@@ -644,6 +762,8 @@
     encodeFlac: encodeFlac,
     supportsFormat: supportsFormat,
     hasAudioContext: hasAudioContext,
+    hasFFmpeg: hasFFmpeg,
+    formatCapability: formatCapability,
     buildFilename: buildFilename,
     formatDuration: formatDuration,
     formatSampleRate: formatSampleRate,

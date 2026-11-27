@@ -21,3 +21,7 @@ npm-debug.log*
 test/output/
 test/shots/
 .cdp-profile/
+
+# 临时探针脚本（调试用，不提交）
+test/tmp-*.js
+test/ffmpeg-probe*.js

@@ -184,6 +184,30 @@ const Core = sandbox.AudioCore;
   check('无 AudioContext 时 hasAudioContext 返回 false',
     Core.hasAudioContext() === false);
 
+  /* ---------- ffmpeg 能力判定 ---------- */
+  check('FFMPEG_ONLY_FORMATS 含 MP3 与 AAC',
+    Core.FFMPEG_ONLY_FORMATS['audio/mpeg'].ext === 'mp3' &&
+    Core.FFMPEG_ONLY_FORMATS['audio/aac'].ext === 'm4a',
+    Object.keys(Core.FFMPEG_ONLY_FORMATS).join(', '));
+  check('FFMPEG_ONLY_FORMATS 不含 Opus（该 core 的 libopus 会崩溃）',
+    !Core.FFMPEG_ONLY_FORMATS['audio/opus']);
+  check('无 ffmpeg 模块时 hasFFmpeg 返回 false', Core.hasFFmpeg() === false);
+  check('formatCapability 对 MP3 判定为需 ffmpeg',
+    Core.formatCapability('audio/mpeg').via === 'ffmpeg',
+    Core.formatCapability('audio/mpeg').via);
+  check('formatCapability 对 MP3 判定为不可用（引擎未启用）',
+    Core.formatCapability('audio/mpeg').ok === false,
+    JSON.stringify(Core.formatCapability('audio/mpeg')));
+  check('formatCapability 对 WAV 判定为原生可用',
+    Core.formatCapability('audio/wav').via === 'native' &&
+    Core.formatCapability('audio/wav').ok === true);
+  check('formatCapability 对 FLAC 判定为原生可用',
+    Core.formatCapability('audio/flac').via === 'native' &&
+    Core.formatCapability('audio/flac').ok === true);
+  check('formatCapability 对 AAC 判定为需 ffmpeg',
+    Core.formatCapability('audio/aac').via === 'ffmpeg',
+    Core.formatCapability('audio/aac').via);
+
   /* ---------- 汇总 ---------- */
   const failed = results.filter(r => !r.ok);
   console.log('\n=========================');

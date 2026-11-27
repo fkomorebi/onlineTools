@@ -77,8 +77,8 @@
     },
     {
       icon: '🎵', route: '#/audio', title: '音频格式转换', category: 'media',
-      desc: 'MP3 / WAV / OGG / FLAC 互转，可重采样、改单双声道，本地解码重编码。',
-      keywords: '音频 转换 mp3 wav ogg flac 格式 重采样 声道 采样率'
+      desc: 'MP3 / WAV / OGG / FLAC / AAC 互转，可重采样、改单双声道，本地解码重编码。',
+      keywords: '音频 转换 mp3 wav ogg flac aac m4a 格式 重采样 声道 采样率 ffmpeg'
     },
     {
       icon: '🎨', route: '#/color', title: '颜色工具', category: 'design',

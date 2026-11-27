@@ -11,7 +11,7 @@
     "test:encode": "node test/encode.test.js",
     "test:gif": "node test/gif-encode.test.js && node test/gif-flow.test.js",
     "test:audio": "node test/audio.test.js",
-    "test:browser": "node test/browser-image.js && node test/browser-convert.js && node test/browser-gif.js && node test/browser-watermark.js && node test/browser-audio.js",
+    "test:browser": "node test/browser-image.js && node test/browser-convert.js && node test/browser-gif.js && node test/browser-watermark.js && node test/browser-audio.js && node test/browser-audio-ffmpeg.js",
     "test:actions": "powershell -NoProfile -ExecutionPolicy Bypass -File test/check-workflow.ps1",
     "shots": "node test/shot2.js"
   },
@@ -35,6 +35,9 @@
     "mp3",
     "wav",
     "flac",
+    "aac",
+    "ffmpeg",
+    "ffmpeg-wasm",
     "static-site",
     "github-pages"
   ],
